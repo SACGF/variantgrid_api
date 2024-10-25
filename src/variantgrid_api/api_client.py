@@ -19,15 +19,15 @@ class VariantGridAPI:
 
     def _post(self, path, json_data):
         url = self._get_url(path)
-        logging.info("url='%s', JSON data:", url)
-        logging.info(json.dumps(json_data))
         response = requests.post(url, headers=self.headers, json=json_data)
         try:
             json_response = response.json()
         except Exception as e:
             json_response = f"Couldn't convert JSON: {e}"
-        logging.info("Response: %s", json_response)
         if not response.ok:
+            logging.info("url='%s', JSON data:", url)
+            logging.info(json.dumps(json_data))
+            logging.info("Response: %s", json_response)
             response.raise_for_status()
         return json_response
 

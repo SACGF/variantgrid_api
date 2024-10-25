@@ -12,11 +12,9 @@ from variantgrid_api.data_models import EnrichmentKit, SequencingRun, Sequencing
 
 def parse_args():
     parser = argparse.ArgumentParser(description="VariantGrid API client")
-    parser.add_argument('--server', help='Base URL of the VariantGrid server inc. port')
-    parser.add_argument('--api-token', help='API token for authentication')
+    parser.add_argument('--server', required=True, help='Base URL of the VariantGrid server inc. port')
+    parser.add_argument('--api-token', required=True, help='API token for authentication')
     parser.add_argument('--step', required=False, help='Run a single step (default: run all)')
-    parser.add_argument('--vcf', required=False, help='Path to (combined) VCF file')
-    parser.add_argument('--gene-coverage', required=False, help='Path to gene coverage file')
     return parser.parse_args()
 
 
@@ -45,18 +43,17 @@ def _get_qc_by_sample_name(sample_sheet_lookup: SampleSheetLookup, sequencing_fi
 
 
 
-def test_api(server, api_token,
-             step=None, vcf_filename=None, gene_coverage_filename=None):
-    TAU_DATA_DIR = "/tau/data/clinical_hg38"
+def test_api(server, api_token, step=None):
+    data_dir = os.path.join(os.path.dirname(__file__), 'test_data')
     SEQUENCING_RUN_NAME = "Haem_20_999_201231_M02027_0112_000000000_JFT79"
-    HAEM_DIR = os.path.join(TAU_DATA_DIR, "idt_haem", SEQUENCING_RUN_NAME)
+    seq_run_dir = os.path.join(data_dir, "idt_haem", SEQUENCING_RUN_NAME)
 
     def seq_run_path(path):
-        return os.path.join(HAEM_DIR, path)
+        return os.path.join(seq_run_dir, path)
 
     experiment = "HAEM_20_999"
     enrichment_kit = EnrichmentKit(name='idt_haem', version=1)
-    sequencing_run = SequencingRun(path=HAEM_DIR,
+    sequencing_run = SequencingRun(path=seq_run_dir,
                                    name=SEQUENCING_RUN_NAME,
                                    date="2020-12-31",
                                    sequencer="SN1101",
@@ -104,13 +101,9 @@ def test_api(server, api_token,
     sample_sheet_lookup = SampleSheetLookup.from_sample_sheet(sample_sheet)
 
     variant_caller_var_dict = VariantCaller(name="VarDict", version="1.8.2")
-    if vcf_filename:
-        combo_vcf_file_name = vcf_filename
-    else:
-        combo_vcf_file_name = seq_run_path("2_variants/NOT_A_REAL_VCF_FILE.vcf")
-
+    combo_vcf_filename = seq_run_path("2_variants/Haem_20_999_201231_M02027_0112_000000000_JFT79.vardict.hg38.vcf.gz")
     sample_sheet_combined_vcf_file = SampleSheetCombinedVCFFile(
-        path=combo_vcf_file_name,
+        path=combo_vcf_filename,
         sample_sheet_lookup=sample_sheet_lookup,
         variant_caller=variant_caller_var_dict)
 
@@ -190,14 +183,11 @@ def test_api(server, api_token,
             ts_to_tv_ratio=2.1, uniformity_of_coverage=83.69)
     ]
 
-    if gene_coverage_filename:
-        gene_coverage_path = gene_coverage_filename
-    else:
-        gene_coverage_path = seq_run_path("4_QC/bam_stats/samples/fake_sample_1.per_gene_coverage.tsv.gz")
+    gene_coverage_filename = seq_run_path("4_QC/bam_stats/samples/fake_sample_1.per_gene_coverage.tsv.gz")
 
     qc_gene_coverage_list = [
         QCGeneCoverage(qc=qc_by_sample_name["fake_sample_1"],
-                       path=gene_coverage_path),
+                       path=gene_coverage_filename),
         QCGeneCoverage(qc=qc_by_sample_name["fake_sample_2"],
                        path=seq_run_path("4_QC/bam_stats/samples/fake_sample_2.per_gene_coverage.tsv.gz"))
     ]
@@ -219,14 +209,10 @@ def test_api(server, api_token,
         "qc_gene_lists": lambda: vg_api.create_multiple_qc_gene_lists(qc_gene_lists),
         "qc_exec_summary": lambda: vg_api.create_qc_exec_stats(qc_exec_stats[0]),
         "qc_exec_summaries": lambda: vg_api.create_multiple_qc_exec_stats(qc_exec_stats),
-        "qc_gene_coverage": lambda: vg_api.create_multiple_qc_gene_coverage(qc_gene_coverage_list)
+        "qc_gene_coverage": lambda: vg_api.create_multiple_qc_gene_coverage(qc_gene_coverage_list),
+        "upload_qc_gene_coverage_file": lambda: vg_api.upload_file(gene_coverage_filename),
+        "upload_vcf_file": lambda: vg_api.upload_file(combo_vcf_filename),
     }
-
-    if gene_coverage_filename:
-        API_STEPS["upload_qc_gene_coverage_file"] = lambda: vg_api.upload_file(gene_coverage_filename)
-
-    if vcf_filename:
-        API_STEPS["upload_vcf_file"] = lambda: vg_api.upload_file(vcf_filename)
 
     for name, func in API_STEPS.items():
         if step:
@@ -241,7 +227,5 @@ def test_api(server, api_token,
 if __name__ == "__main__":
     args = parse_args()
     test_api(args.server, args.api_token,
-             step=args.step,
-             vcf_filename=args.vcf,
-             gene_coverage_filename=args.gene_coverage)
+             step=args.step)
 
