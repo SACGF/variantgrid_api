@@ -20,7 +20,8 @@ classifiers = [
 ]
 dependencies = [
     "requests",
-    "dataclasses-json"
+    "dataclasses-json",
+    "samshee"
 ]
 
 [project.urls]

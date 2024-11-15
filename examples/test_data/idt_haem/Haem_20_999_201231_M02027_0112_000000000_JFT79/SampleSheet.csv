@@ -1,4 +1,21 @@
-FCID,Lane,SampleID,SampleRef,Index,Description,Control,Recipe,Operator,SampleProject,ProjectType,Group,Bioinformatician,E-mail,Adapter,Priming,Notes,conc pM
-test_hiseq_flowcell,3,fake_sample_1,GRCh38,GCCAAT,Foo,N,,XX,SampleProject,WES,tau,,foo@bar.com,KAPA,,,16
-test_hiseq_flowcell,3,fake_sample_2,GRCh38,CAGATC,Foo,N,,XX,SampleProject,WES,tau,,foo@bar.com,KAPA,,,16
-#_IEMVERSION_3_TruSeq LT,#_IEMVERSION_3_TruSeq LT,,,,,,,,,,,,,,,,
+[Header],,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+IEMFileVersion,4,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Investigator Name,Wetlab person,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Experiment Name,RCAP20241008160048,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Date,11/10/2024,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Workflow,GenerateFASTQ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Application,NextSeq FASTQ Only,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Assay,TruSeq LT,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Description,HKMWVDRX5,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Chemistry,amplicon,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+[Reads],,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+151,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+151,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+[Settings],,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+OverrideCycles,Y151;I8U10;I8;Y151,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+[Data],,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+FlowCellID,FlowCellType,Sample_ID,Sex,SAPOrderNumber,Organism,I7_Index_ID,index,I5_Index_ID,index2,CaptureVendor,CaptureType,CaptureVersion,CapturePool,LabRunID,ProjectType,Coverage,Institution,Group,Sample_Project,E-mail,Urgency,Adapter,Priming,RunReference,Notes,Control,Recipe,Operator,Bioinformatician,Description
+HKMWVDRX5,S1,fake_sample_1,M,SAP24100813004712,human,IDT8_UDI_UMI_Adapter205,CTGCGTAT,IDT8_i5_205,ACAGTTCG,IDT,Haem,v2,Haem_24_071,Haem_24_071,DNA_Capture,S,SAPathology,TAU,,nobody@sa.gov.au,NXR,KAPA,,RCAP20241008160048,IDT_SampleID_added,N,,RK,,
+HKMWVDRX5,S1,fake_sample_1,F,SAP24100813004713,human,IDT8_UDI_UMI_Adapter206,ACGGTCTT,IDT8_i5_206,AACTCGGA,IDT,Haem,v2,Haem_24_071,Haem_24_071,DNA_Capture,S,SAPathology,TAU,,nobody@sa.gov.au,NXR,KAPA,,RCAP20241008160048,IDT_SampleID_added,N,,RK,,

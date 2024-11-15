@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from dataclasses import dataclass, field
 from typing import Optional, List
@@ -21,6 +22,16 @@ class SequencingRun:
     sequencer: str
     experiment: str
     enrichment_kit: EnrichmentKit
+
+    @staticmethod
+    def get_date_from_name(name) -> Optional[datetime.date]:
+        date = None
+        if m := re.match(r".*_?([12]\d{5})_", name):
+            date_str = m.group(1)
+            dt = datetime.strptime(date_str, "%y%m%d")
+            date = dt.date()
+        return date
+
 
 
 @dataclass_json
