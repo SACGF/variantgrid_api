@@ -38,10 +38,10 @@ class SequencingRun:
 @dataclass
 class SequencingSample:
     sample_id: str
-    sample_number: int
-    lane: int
+    sample_number: int  # Sample sheet row (to keep in order)
     barcode: str
     enrichment_kit: EnrichmentKit
+    lane: Optional[int] = None
     sample_project: Optional[str] = None
     is_control: bool = False
     failed: bool = False
