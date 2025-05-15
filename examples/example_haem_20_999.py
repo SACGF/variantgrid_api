@@ -1,6 +1,7 @@
 import argparse
 import dataclasses
 import os
+from datetime import datetime
 from hashlib import md5
 from typing import List, Dict
 
@@ -53,9 +54,10 @@ def test_api(server, api_token, step=None):
 
     experiment = "HAEM_20_999"
     enrichment_kit = EnrichmentKit(name='idt_haem', version=1)
+    seq_date = SequencingRun.get_date_from_name(SEQUENCING_RUN_NAME)
     sequencing_run = SequencingRun(path=seq_run_dir,
                                    name=SEQUENCING_RUN_NAME,
-                                   date="2020-12-31",
+                                   date=seq_date,
                                    sequencer="SN1101",
                                    experiment=experiment,
                                    enrichment_kit=enrichment_kit)
@@ -64,7 +66,6 @@ def test_api(server, api_token, step=None):
         SequencingSample(sample_id="fake_sample_1",
                          sample_project=None,
                          sample_number=1,
-                         lane=3,
                          barcode="GCCAAT",
                          enrichment_kit=enrichment_kit,
                          is_control=False,
@@ -78,7 +79,6 @@ def test_api(server, api_token, step=None):
         SequencingSample(sample_id="fake_sample_2",
                          sample_project=None,
                          sample_number=2,
-                         lane=3,
                          barcode="CAGATC",
                          enrichment_kit=enrichment_kit,
                          is_control=False,
@@ -94,7 +94,7 @@ def test_api(server, api_token, step=None):
     sample_sheet = SampleSheet(
         path=seq_run_path("SampleSheet.csv"),
         sequencing_run=sequencing_run,
-        file_last_modified=1725941707.0033002,
+        file_last_modified=datetime.fromtimestamp(1725941707.0033002),
         hash="f0ac87bcae3f0e56b3f65b70fd6389ce",
         sequencing_samples=sequencing_samples)
 
@@ -164,7 +164,8 @@ def test_api(server, api_token, step=None):
         QCExecStats(
             qc=qc_by_sample_name["fake_sample_1"],
             path=qc_exec_stats_filename_1, hash=_file_md5sum(qc_exec_stats_filename_1),
-            created='2024-10-18T11:45:26.826823+10:30', modified='2024-10-18T11:45:26.826844+10:30',
+            created=datetime.fromisoformat('2024-10-18T11:45:26.826823+10:30'),
+            modified=datetime.fromisoformat('2024-10-18T11:45:26.826844+10:30'),
             is_valid=True, deduplicated_reads=165107, indels_dbsnp_percent=95.75, mean_coverage_across_genes=162.84,
             mean_coverage_across_kit=201.43, median_insert=153.0, number_indels=923, number_snps=363,
             percent_10x_goi=100.0, percent_20x_goi=100.0, percent_20x_kit=98.35, percent_error_rate=0.91,
@@ -174,7 +175,8 @@ def test_api(server, api_token, step=None):
         QCExecStats(
             qc=qc_by_sample_name["fake_sample_2"],
             path=qc_exec_stats_filename_2, hash=_file_md5sum(qc_exec_stats_filename_2),
-            created='2024-10-18T11:45:26.838244+10:30', modified='2024-10-18T11:45:26.838262+10:30',
+            created=datetime.fromisoformat('2024-10-18T11:45:26.838244+10:30'),
+            modified=datetime.fromisoformat('2024-10-18T11:45:26.838262+10:30'),
             is_valid=True, deduplicated_reads=275107, indels_dbsnp_percent=88.75, mean_coverage_across_genes=162.84,
             mean_coverage_across_kit=150.43, median_insert=222.0, number_indels=853, number_snps=1213,
             percent_10x_goi=100.0, percent_20x_goi=100.0, percent_20x_kit=87.35, percent_error_rate=0.55,
