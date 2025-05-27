@@ -94,7 +94,7 @@ def test_api(server, api_token, step=None):
     sample_sheet = SampleSheet(
         path=seq_run_path("SampleSheet.csv"),
         sequencing_run=sequencing_run,
-        file_last_modified=datetime.fromtimestamp(1725941707.0033002),
+        file_last_modified=1725941707.0033002,
         hash="f0ac87bcae3f0e56b3f65b70fd6389ce",
         sequencing_samples=sequencing_samples)
 
