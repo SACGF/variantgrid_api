@@ -53,7 +53,7 @@ class SequencingSample:
 class SampleSheet:
     path: str
     sequencing_run: SequencingRun
-    file_last_modified: datetime
+    file_last_modified: float
     hash: str
     sequencing_samples: List[SequencingSample] = field(metadata=config(field_name="sequencingsample_set"))
 

@@ -37,9 +37,9 @@ class VariantGridAPI:
         except Exception as e:
             json_response = f"Couldn't convert JSON: {e}"
         if not response.ok:
-            logging.info("url='%s', JSON data:", url)
-            logging.info(json_string)
-            logging.info("Response: %s", json_response)
+            logging.error("url='%s', JSON data:", url)
+            logging.error(json_string)
+            logging.error("Response: %s", json_response)
             response.raise_for_status()
         return json_response
 
