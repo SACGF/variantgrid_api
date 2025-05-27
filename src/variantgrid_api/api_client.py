@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import os
@@ -7,6 +8,13 @@ import requests
 
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, SampleSheetCombinedVCFFile, \
     SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage
+
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self,o):
+        if isinstance(o,(datetime.date, datetime.datetime)):
+            return o.isoformat()
+        return super().default(o)
+
 
 
 class VariantGridAPI:
@@ -19,14 +27,18 @@ class VariantGridAPI:
 
     def _post(self, path, json_data):
         url = self._get_url(path)
-        response = requests.post(url, headers=self.headers, json=json_data)
+        json_string = json.dumps(json_data, cls=DateTimeEncoder)
+        response = requests.post(url,
+                                 headers={**self.headers, "Content-Type": "application/json"},
+                                 data=json_string)
+        # response = requests.post(url, headers=self.headers, json=json_data)
         try:
             json_response = response.json()
         except Exception as e:
             json_response = f"Couldn't convert JSON: {e}"
         if not response.ok:
             logging.info("url='%s', JSON data:", url)
-            logging.info(json.dumps(json_data))
+            logging.info(json_string)
             logging.info("Response: %s", json_response)
             response.raise_for_status()
         return json_response
