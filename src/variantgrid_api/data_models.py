@@ -162,9 +162,9 @@ class QCExecStats:
     median_insert: float
     number_indels: int
     number_snps: int
-    percent_10x_goi: float
-    percent_20x_goi: float
-    percent_20x_kit: float
+    percent_10x_goi: Optional[float] = None
+    percent_20x_goi: Optional[float] = None
+    percent_20x_kit: Optional[float] = None
     percent_error_rate: float
     percent_map_to_diff_chr: float
     percent_read_enrichment: float
