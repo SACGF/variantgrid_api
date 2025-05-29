@@ -162,9 +162,6 @@ class QCExecStats:
     median_insert: float
     number_indels: int
     number_snps: int
-    percent_10x_goi: Optional[float] = None
-    percent_20x_goi: Optional[float] = None
-    percent_20x_kit: Optional[float] = None
     percent_error_rate: float
     percent_map_to_diff_chr: float
     percent_read_enrichment: float
@@ -177,6 +174,9 @@ class QCExecStats:
     snp_dbsnp_percent: float
     ts_to_tv_ratio: float
     uniformity_of_coverage: float
+    percent_10x_goi: Optional[float] = None
+    percent_20x_goi: Optional[float] = None
+    percent_20x_kit: Optional[float] = None
     percent_100x_goi: Optional[float] = None
     percent_100x_kit: Optional[float] = None
     percent_250x_goi: Optional[float] = None
