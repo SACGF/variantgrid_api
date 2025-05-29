@@ -234,3 +234,9 @@ fabric.properties
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
 
+examples/example_haem.py
+examples/example_haem_20_555.py
+examples/example_tso500.py
+examples/test_data/idt_haem/Haem_20_555_20132_M02027_0113_000000000_JFT79/
+examples/test_data/idt_haem/Haem_25_045_250521_A01934_0239_BH3NVKDRX7/
+examples/test_data_original/
