@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Changed
+
+- [Make QCExecStats fields optional](https://github.com/SACGF/cdot/issues/6) - Made optional/mandatory fields match backend
+
 ## [0.3.1] - 2025-06-11
 
 ### Added
