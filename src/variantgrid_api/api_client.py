@@ -31,14 +31,18 @@ class VariantGridAPI:
         response = requests.post(url,
                                  headers={**self.headers, "Content-Type": "application/json"},
                                  data=json_string)
-        # response = requests.post(url, headers=self.headers, json=json_data)
+
+        extra_error_message = f"{url=}, {json_string=}"
+        return self._handle_json_response(response, extra_error_message)
+
+    def _handle_json_response(self, response, extra_error_message: Optional[str] = None):
         try:
             json_response = response.json()
         except Exception as e:
             json_response = f"Couldn't convert JSON: {e}"
         if not response.ok:
-            logging.error("url='%s', JSON data:", url)
-            logging.error(json_string)
+            if extra_error_message:
+                logging.error(extra_error_message)
             logging.error("Response: %s", json_response)
             response.raise_for_status()
         return json_response
@@ -135,7 +139,9 @@ class VariantGridAPI:
                 "files": {"file": f},
                 "params": {"path": filename}
             }
-            return requests.post(url, headers=self.headers, **kwargs)
+            response = requests.post(url, headers=self.headers, **kwargs)
+            extra_error_message = f"{filename=}"
+            return self._handle_json_response(response, extra_error_message)
 
     ###############
     ## Get methods
@@ -145,15 +151,9 @@ class VariantGridAPI:
         response = requests.get(url,
                                 params,
                                 headers=self.headers)
-        try:
-            json_response = response.json()
-        except Exception as e:
-            json_response = f"Couldn't convert JSON: {e}"
-        if not response.ok:
-            logging.error("url='%s', params='%s'", url, params)
-            logging.error("Response: %s", json_response)
-            response.raise_for_status()
-        return json_response
+
+        extra_error_message = f"{url=}, {params=}"
+        return self._handle_json_response(response, extra_error_message)
 
     def sequencing_run_has_vcf(self, sequencing_run: SequencingRun, path: Optional[str] = None):
         """ Returns whether the SequencingRun has a VCF associated with it. If path is set, VCF must match that path
