@@ -155,25 +155,16 @@ class QCExecStats:
     modified: datetime
     hash: str
     is_valid: bool
-    deduplicated_reads: int
-    indels_dbsnp_percent: float
     mean_coverage_across_genes: float
     mean_coverage_across_kit: float
     median_insert: float
-    number_indels: int
-    number_snps: int
-    percent_error_rate: float
-    percent_map_to_diff_chr: float
     percent_read_enrichment: float
-    percent_reads: float
-    percent_softclip: float
     percent_duplication: float
-    reads: int
-    sample_id_lod: float
-    sex_match: str
-    snp_dbsnp_percent: float
-    ts_to_tv_ratio: float
     uniformity_of_coverage: float
+    deduplicated_reads: Optional[int] = None
+    indels_dbsnp_percent: Optional[float] = None
+    number_indels: Optional[int] = None
+    number_snps: Optional[int] = None
     percent_10x_goi: Optional[float] = None
     percent_20x_goi: Optional[float] = None
     percent_20x_kit: Optional[float] = None
@@ -183,6 +174,15 @@ class QCExecStats:
     percent_250x_kit: Optional[float] = None
     percent_500x_goi: Optional[float] = None
     percent_500x_kit: Optional[float] = None
+    percent_error_rate: Optional[float] = None
+    percent_map_to_diff_chr: Optional[float] = None
+    percent_reads: Optional[float] = None
+    percent_softclip: Optional[float] = None
+    reads: Optional[int] = None
+    sample_id_lod: Optional[float] = None
+    sex_match: Optional[str] = None
+    snp_dbsnp_percent: Optional[float] = None
+    ts_to_tv_ratio: Optional[float] = None
 
 
 @dataclass_json
