@@ -213,6 +213,9 @@ def test_api(server, api_token, step=None):
         "qc_exec_summaries": lambda: vg_api.create_multiple_qc_exec_stats(qc_exec_stats),
         "qc_gene_coverage": lambda: vg_api.create_multiple_qc_gene_coverage(qc_gene_coverage_list),
         "upload_qc_gene_coverage_file": lambda: vg_api.upload_file(gene_coverage_filename),
+        "sequencing_run_has_any_vcf": lambda: vg_api.sequencing_run_has_vcf(sequencing_run),
+        "sequencing_run_has_fake_vcf": lambda: vg_api.sequencing_run_has_vcf(sequencing_run, "fake_vcf"),
+        "sequencing_run_has_our_vcf": lambda: vg_api.sequencing_run_has_vcf(sequencing_run, combo_vcf_filename),
         "upload_vcf_file": lambda: vg_api.upload_file(combo_vcf_filename),
     }
 

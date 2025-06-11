@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 import os
-from typing import List
+from typing import List, Optional
 
 import requests
 
@@ -136,3 +136,41 @@ class VariantGridAPI:
                 "params": {"path": filename}
             }
             return requests.post(url, headers=self.headers, **kwargs)
+
+    ###############
+    ## Get methods
+
+    def _get(self, path, params=None):
+        url = self._get_url(path)
+        response = requests.get(url,
+                                params,
+                                headers=self.headers)
+        try:
+            json_response = response.json()
+        except Exception as e:
+            json_response = f"Couldn't convert JSON: {e}"
+        if not response.ok:
+            logging.error("url='%s', params='%s'", url, params)
+            logging.error("Response: %s", json_response)
+            response.raise_for_status()
+        return json_response
+
+    def sequencing_run_has_vcf(self, sequencing_run: SequencingRun, path: Optional[str] = None):
+        """ Returns whether the SequencingRun has a VCF associated with it. If path is set, VCF must match that path
+            otherwise - any VCF present will retur True """
+        return self.sequencing_run_name_has_vcf(sequencing_run.name, path)
+
+    def sequencing_run_name_has_vcf(self, sequencing_run_name: str, path: Optional[str] = None):
+        """ Returns whether the SequencingRun has a VCF associated with it. If path is set, VCF must match that path
+            otherwise - any VCF present will retur True """
+        data = self._get(f"seqauto/api/v1/sequencing_run/{sequencing_run_name}/")
+        found_vcf = False
+        for vcf in data["vcf_set"]:
+            if path is None or path in vcf["path"]:
+                found_vcf = True
+                break
+        return found_vcf
+
+
+
+
