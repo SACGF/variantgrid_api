@@ -109,18 +109,21 @@ def test_api(server, api_token, step=None):
 
     aligner = Aligner(name='BWA', version="0.7.18")
     variant_caller_gatk = VariantCaller(name="GATK", version="4.1.9.0")
+    single_sample_vcf_filename_1 = seq_run_path("2_variants/gatk_per_sample/fake_sample_1.gatk.hg38.vcf.gz")
+    single_sample_vcf_filename_2 = seq_run_path("2_variants/gatk_per_sample/fake_sample_2.gatk.hg38.vcf.gz")
+
     bam_file_1 = BamFile(
         path=seq_run_path("1_BAM/fake_sample_1.hg38.bam"),
         aligner=aligner)
     vcf_file_1 = VCFFile(
-        path=seq_run_path("2_variants/gatk_per_sample/fake_sample_1.gatk.hg38.vcf.gz"),
+        path=single_sample_vcf_filename_1,
         variant_caller=variant_caller_gatk)
 
     bam_file_2 = BamFile(
         path=seq_run_path("1_BAM/fake_sample_2.hg38.bam"),
         aligner=aligner)
     vcf_file_2 = VCFFile(
-        path=seq_run_path("2_variants/gatk_per_sample/fake_sample_2.gatk.hg38.vcf.gz"),
+        path=single_sample_vcf_filename_2,
         variant_caller=variant_caller_gatk)
 
     sequencing_files = [
@@ -216,7 +219,9 @@ def test_api(server, api_token, step=None):
         "sequencing_run_has_any_vcf": lambda: vg_api.sequencing_run_has_vcf(sequencing_run),
         "sequencing_run_has_fake_vcf": lambda: vg_api.sequencing_run_has_vcf(sequencing_run, "fake_vcf"),
         "sequencing_run_has_our_vcf": lambda: vg_api.sequencing_run_has_vcf(sequencing_run, combo_vcf_filename),
-        "upload_vcf_file": lambda: vg_api.upload_file(combo_vcf_filename),
+        "upload_single_sample_vcf_file_1": lambda: vg_api.upload_file(single_sample_vcf_filename_1),
+        "upload_single_sample_vcf_file_2": lambda: vg_api.upload_file(single_sample_vcf_filename_2),
+        "upload_combo_vcf_file": lambda: vg_api.upload_file(combo_vcf_filename),
     }
 
     for name, func in API_STEPS.items():
