@@ -7,7 +7,8 @@ from typing import List, Optional
 import requests
 
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, SampleSheetCombinedVCFFile, \
-    SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage
+    SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer
+
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self,o):
@@ -56,6 +57,15 @@ class VariantGridAPI:
     def create_enrichment_kit(self, enrichment_kit: EnrichmentKit):
         return self._post("seqauto/api/v1/enrichment_kit/",
                           enrichment_kit.to_dict())
+
+
+    def create_sequencer_model(self, sequencer_model: SequencerModel):
+        return self._post("seqauto/api/v1/sequencer_model/",
+                          sequencer_model.to_dict())
+
+    def create_sequencer(self, sequencer: Sequencer):
+        return self._post("seqauto/api/v1/sequencer/",
+                          sequencer.to_dict())
 
     def create_sequencing_run(self, sequencing_run: SequencingRun):
         return self._post("seqauto/api/v1/sequencing_run/",

@@ -6,7 +6,7 @@ from hashlib import md5
 from typing import List, Dict
 
 from variantgrid_api.api_client import VariantGridAPI
-from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SequencingSample, SampleSheet, \
+from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, SampleSheet, \
     SampleSheetCombinedVCFFile, VariantCaller, SampleSheetLookup, Aligner, VCFFile, BamFile, SequencingFile, \
     SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage
 
@@ -54,11 +54,15 @@ def test_api(server, api_token, step=None):
 
     experiment = "HAEM_20_999"
     enrichment_kit = EnrichmentKit(name='idt_haem', version=1)
+
+    sequencer_name = "SN1101"
+    sequencer_model = SequencerModel(model="HiSeq 2500", manufacturer="Illumina", data_naming_convention="H")
+    sequencer = Sequencer(name=sequencer_name, sequencer_model=sequencer_model)
     seq_date = SequencingRun.get_date_from_name(SEQUENCING_RUN_NAME)
     sequencing_run = SequencingRun(path=seq_run_dir,
                                    name=SEQUENCING_RUN_NAME,
                                    date=seq_date,
-                                   sequencer="SN1101",
+                                   sequencer=sequencer_name,
                                    experiment=experiment,
                                    enrichment_kit=enrichment_kit)
 
@@ -205,6 +209,8 @@ def test_api(server, api_token, step=None):
     API_STEPS = {
         "experiment": lambda: vg_api.create_experiment(experiment),
         "enrichment_kit": lambda: vg_api.create_enrichment_kit(enrichment_kit),
+        "sequencer_model": lambda: vg_api.create_sequencer_model(sequencer_model),
+        "sequencer": lambda: vg_api.create_sequencer(sequencer),
         "sequencing_run": lambda: vg_api.create_sequencing_run(sequencing_run),
         "sample_sheet": lambda: vg_api.create_sample_sheet(sample_sheet),
         "sample_sheet_combined_vcf_file": lambda: vg_api.create_sample_sheet_combined_vcf_file(
