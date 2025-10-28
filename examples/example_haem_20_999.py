@@ -6,9 +6,10 @@ from hashlib import md5
 from typing import List, Dict
 
 from variantgrid_api.api_client import VariantGridAPI
-from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, SampleSheet, \
+from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, \
+    SampleSheet, \
     SampleSheetCombinedVCFFile, VariantCaller, SampleSheetLookup, Aligner, VCFFile, BamFile, SequencingFile, \
-    SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage
+    SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer
 
 
 def parse_args():
@@ -55,8 +56,9 @@ def test_api(server, api_token, step=None):
     experiment = "HAEM_20_999"
     enrichment_kit = EnrichmentKit(name='idt_haem', version=1)
 
+    manufacturer = Manufacturer(name="Illumina")
+    sequencer_model = SequencerModel(model="HiSeq 2500", manufacturer=manufacturer, data_naming_convention="H")
     sequencer_name = "SN1101"
-    sequencer_model = SequencerModel(model="HiSeq 2500", manufacturer="Illumina", data_naming_convention="H")
     sequencer = Sequencer(name=sequencer_name, sequencer_model=sequencer_model)
     seq_date = SequencingRun.get_date_from_name(SEQUENCING_RUN_NAME)
     sequencing_run = SequencingRun(path=seq_run_dir,

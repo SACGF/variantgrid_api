@@ -15,9 +15,14 @@ class EnrichmentKit:
 
 @dataclass_json
 @dataclass
+class Manufacturer:
+    name: str
+
+@dataclass_json
+@dataclass
 class SequencerModel:
     model: str
-    manufacturer: str
+    manufacturer: Manufacturer
     data_naming_convention: str # 'M' or 'H' for (HiSeq only)
 
 
