@@ -25,7 +25,7 @@ class SequencerModel:
 @dataclass
 class Sequencer:
     name: str
-    sequencer_model: SequencerModel
+    sequencer_model: str  # Just the string for the model needed not whole object
 
 
 @dataclass_json

@@ -56,8 +56,9 @@ def test_api(server, api_token, step=None):
     enrichment_kit = EnrichmentKit(name='idt_haem', version=1)
 
     sequencer_name = "SN1101"
-    sequencer_model = SequencerModel(model="HiSeq 2500", manufacturer="Illumina", data_naming_convention="H")
-    sequencer = Sequencer(name=sequencer_name, sequencer_model=sequencer_model)
+    sequencer_model_name = "HiSeq 2500"
+    sequencer_model = SequencerModel(model=, manufacturer="Illumina", data_naming_convention="H")
+    sequencer = Sequencer(name=sequencer_name, sequencer_model=sequencer_model_name)
     seq_date = SequencingRun.get_date_from_name(SEQUENCING_RUN_NAME)
     sequencing_run = SequencingRun(path=seq_run_dir,
                                    name=SEQUENCING_RUN_NAME,
