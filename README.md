@@ -5,3 +5,14 @@
 Python API client for [VariantGrid](https://github.com/SACGF/variantgrid) Open source Variant database and analysis platform
 
 See [changelog](https://github.com/SACGF/variantgrid_api/blob/main/CHANGELOG.md)
+
+## Example
+
+```
+from variantgrid_api.api_client import VariantGridAPI
+from variantgrid_api.data_models import EnrichmentKit
+
+api = VariantGridAPI(server="https://variantgrid.com", api_token="YOUR_API_TOKEN")
+enrichment_kit = EnrichmentKit(name="idt_haem", version=1)
+result = api.create_enrichment_kit(enrichment_kit)
+```
