@@ -1,3 +1,7 @@
+## [unreleased]
+
+-
+
 ## [1.1.1] - 2026-01-14
 
 ### Added
@@ -35,7 +39,8 @@
 
 - Initial commit in new Repo. Started as v3 as we had very old code on PyPi
 
-[unreleased]: https://github.com/SACGF/variantgrid_api/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/SACGF/variantgrid_api/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/SACGF/variantgrid_api/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/SACGF/variantgrid_api/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/SACGF/variantgrid_api/compare/v0.3.1...v1.0.0
 [0.3.1]: https://github.com/SACGF/variantgrid_api/compare/v0.3.0...v0.3.1
