@@ -26,11 +26,14 @@ class EmptyInputPolicy(Enum):
 
 class VariantGridAPI:
     def __init__(self, server, api_token,
-                 empty_input_policy=EmptyInputPolicy.ERROR
+                 empty_input_policy=EmptyInputPolicy.ERROR,
+                 log_request=False, log_response=False
     ):
         self.server = server
         self.headers = {"Authorization": f"Token {api_token}"}
         self.validation_handler = self._get_validation_handler(empty_input_policy)
+        self.log_request = log_request
+        self.log_response = log_response
 
     def _get_url(self, url):
         return os.path.join(self.server, url)
@@ -38,6 +41,8 @@ class VariantGridAPI:
     def _post(self, path, json_data):
         url = self._get_url(path)
         json_string = json.dumps(json_data, cls=DateTimeEncoder)
+        if self.log_request:
+            logging.info("POST to '%s', JSON: %s", url, json_string)
         response = requests.post(url,
                                  headers={**self.headers, "Content-Type": "application/json"},
                                  data=json_string)
@@ -48,6 +53,8 @@ class VariantGridAPI:
     def _handle_json_response(self, response, extra_error_message: Optional[str] = None):
         try:
             json_response = response.json()
+            if self.log_response:
+                logging.info("Response from '%s', JSON: %s", response.url, json_response)
         except Exception as e:
             json_response = f"Couldn't convert JSON: {e}"
         if not response.ok:
