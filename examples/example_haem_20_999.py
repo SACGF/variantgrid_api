@@ -46,7 +46,8 @@ def _get_qc_by_sample_name(sample_sheet_lookup: SampleSheetLookup, sequencing_fi
 
 
 def test_api(server, api_token, step=None):
-    data_dir = os.path.join(os.path.dirname(__file__), 'test_data')
+    proj_dir = os.path.dirname(os.path.dirname(__file__))  # In "examples"
+    data_dir = os.path.join(proj_dir, "tests", 'test_data')
     SEQUENCING_RUN_NAME = "Haem_20_999_201231_M02027_0112_000000000_JFT79"
     seq_run_dir = os.path.join(data_dir, "idt_haem", SEQUENCING_RUN_NAME)
 

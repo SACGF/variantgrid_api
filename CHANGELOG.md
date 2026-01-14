@@ -1,3 +1,11 @@
+## [1.1.1] - 2026-01-14
+
+### Added
+
+- [Optional flags to log request / responses](https://github.com/SACGF/variantgrid_api/issues/11)
+- [Validation - check for empty data](https://github.com/SACGF/variantgrid_api/issues/12)
+- [Add Unit tests](https://github.com/SACGF/variantgrid_api/issues/13)
+
 ## [1.1.0] - 2025-10-27
 
 ### Added

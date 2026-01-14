@@ -27,11 +27,15 @@ class EmptyInputPolicy(Enum):
 class VariantGridAPI:
     def __init__(self, server, api_token,
                  empty_input_policy=EmptyInputPolicy.ERROR,
+                 logger: Optional[logging.Logger] = None,
                  log_request=False, log_response=False
     ):
         self.server = server
         self.headers = {"Authorization": f"Token {api_token}"}
-        self.validation_handler = self._get_validation_handler(empty_input_policy)
+        if logger is None:
+            logger = logging.getLogger(__name__)
+        self.logger = logger
+        self.validation_handler = self._get_validation_handler(empty_input_policy, logger)
         self.log_request = log_request
         self.log_response = log_response
 
@@ -42,7 +46,7 @@ class VariantGridAPI:
         url = self._get_url(path)
         json_string = json.dumps(json_data, cls=DateTimeEncoder)
         if self.log_request:
-            logging.info("POST to '%s', JSON: %s", url, json_string)
+            self.logger.info("POST to '%s', JSON: %s", url, json_string)
         response = requests.post(url,
                                  headers={**self.headers, "Content-Type": "application/json"},
                                  data=json_string)
@@ -54,21 +58,18 @@ class VariantGridAPI:
         try:
             json_response = response.json()
             if self.log_response:
-                logging.info("Response from '%s', JSON: %s", response.url, json_response)
+                self.logger.info("Response from '%s', JSON: %s", response.url, json_response)
         except Exception as e:
             json_response = f"Couldn't convert JSON: {e}"
         if not response.ok:
             if extra_error_message:
-                logging.error(extra_error_message)
-            logging.error("Response: %s", json_response)
+                self.logger.error(extra_error_message)
+            self.logger.error("Response: %s", json_response)
             response.raise_for_status()
         return json_response
 
     @staticmethod
-    def _get_validation_handler(empty_input_policy: EmptyInputPolicy, logger: Optional[logging.Logger]=None) -> Callable:
-        if logger is None:
-            logger = logging.getLogger(__name__)
-
+    def _get_validation_handler(empty_input_policy: EmptyInputPolicy, logger: logging.Logger) -> Callable:
         def _ignore(msg):
             pass
 

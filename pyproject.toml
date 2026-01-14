@@ -21,8 +21,10 @@ classifiers = [
 dependencies = [
     "requests",
     "dataclasses-json",
-    "samshee"
 ]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-cov>=5", "responses"]
 
 [project.urls]
 "Homepage" = "https://github.com/SACGF/variantgrid_api"
