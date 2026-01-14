@@ -2,7 +2,8 @@ import datetime
 import json
 import logging
 import os
-from typing import List, Optional
+from enum import Enum
+from typing import List, Optional, Callable
 
 import requests
 
@@ -17,11 +18,19 @@ class DateTimeEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+class EmptyInputPolicy(Enum):
+    IGNORE = "ignore"
+    WARN = "warn"
+    ERROR = "error"
+
 
 class VariantGridAPI:
-    def __init__(self, server, api_token):
+    def __init__(self, server, api_token,
+                 empty_input_policy=EmptyInputPolicy.ERROR
+    ):
         self.server = server
         self.headers = {"Authorization": f"Token {api_token}"}
+        self.validation_handler = self._get_validation_handler(empty_input_policy)
 
     def _get_url(self, url):
         return os.path.join(self.server, url)
@@ -48,30 +57,70 @@ class VariantGridAPI:
             response.raise_for_status()
         return json_response
 
+    @staticmethod
+    def _get_validation_handler(empty_input_policy: EmptyInputPolicy, logger: Optional[logging.Logger]=None) -> Callable:
+        if logger is None:
+            logger = logging.getLogger(__name__)
+
+        def _ignore(msg):
+            pass
+
+        def _warn(msg):
+            logger.warning(msg)
+
+        def _error(msg):
+            raise ValueError(msg)
+
+        return {
+            EmptyInputPolicy.IGNORE: _ignore,
+            EmptyInputPolicy.WARN: _warn,
+            EmptyInputPolicy.ERROR: _error,
+        }[empty_input_policy]
+
+    def _validate_string(self, info: str, s: Optional[str]) -> None:
+        if s is None:
+            self.validation_handler(f"{info}: is None")
+        elif s == "":
+            self.validation_handler(f"{info}: empty string")
+
+    def _validate_object(self, info: str, obj):
+        if obj is None:
+            self.validation_handler(f"{info}: is None")
+
+    def _validate_list(self, info: str, list_obj: List):
+        if not list_obj:
+            self.validation_handler(f"{info}: empty list")
+
     def create_experiment(self, experiment: str):
+        self._validate_string("experiment", experiment)
         json_data = {
             "name": experiment
         }
         return self._post("seqauto/api/v1/experiment/", json_data)
 
     def create_enrichment_kit(self, enrichment_kit: EnrichmentKit):
+        self._validate_object("enrichment_kit", enrichment_kit)
         return self._post("seqauto/api/v1/enrichment_kit/",
                           enrichment_kit.to_dict())
 
 
     def create_sequencer_model(self, sequencer_model: SequencerModel):
+        self._validate_object("sequencer_model", sequencer_model)
         return self._post("seqauto/api/v1/sequencer_model/",
                           sequencer_model.to_dict())
 
     def create_sequencer(self, sequencer: Sequencer):
+        self._validate_object("sequencer", sequencer)
         return self._post("seqauto/api/v1/sequencer/",
                           sequencer.to_dict())
 
     def create_sequencing_run(self, sequencing_run: SequencingRun):
+        self._validate_object("sequencing_run", sequencing_run)
         return self._post("seqauto/api/v1/sequencing_run/",
                           sequencing_run.to_dict())
 
     def create_sample_sheet(self, sample_sheet: SampleSheet):
+        self._validate_object("sample_sheet", sample_sheet)
         json_data = sample_sheet.to_dict()
         # We don't want all sequencing_run just the name
         sequencing_run = json_data.pop("sequencing_run")
@@ -80,11 +129,14 @@ class VariantGridAPI:
                           json_data)
 
     def create_sample_sheet_combined_vcf_file(self, sample_sheet_combined_vcf_file: SampleSheetCombinedVCFFile):
+        self._validate_object("sample_sheet_combined_vcf_file", sample_sheet_combined_vcf_file)
         json_data = sample_sheet_combined_vcf_file.to_dict()
         return self._post("seqauto/api/v1/sample_sheet_combined_vcf_file/",
                           json_data)
 
     def create_sequencing_data(self, sample_sheet_lookup: SampleSheetLookup, sequencing_files: List[SequencingFile]):
+        self._validate_object("sample_sheet_lookup", sample_sheet_lookup)
+        self._validate_list("sequencing_files", sequencing_files)
         records = []
         for sf in sequencing_files:
             data = sf.to_dict()
@@ -105,12 +157,14 @@ class VariantGridAPI:
                           json_data)
 
     def create_qc_gene_list(self, qc_gene_list: QCGeneList):
+        self._validate_object("qc_gene_list", qc_gene_list)
         json_data = qc_gene_list.to_dict()
         return self._post("seqauto/api/v1/qc_gene_list/",
                           json_data)
 
 
     def create_multiple_qc_gene_lists(self, qc_gene_lists: List[QCGeneList]):
+        self._validate_list("qc_gene_lists", qc_gene_lists)
         json_data = {
             "records": [
                 qcgl.to_dict() for qcgl in qc_gene_lists
@@ -120,11 +174,13 @@ class VariantGridAPI:
                           json_data)
 
     def create_qc_exec_stats(self, qc_exec_stats: QCExecStats):
+        self._validate_object("qc_exec_stats", qc_exec_stats)
         json_data = qc_exec_stats.to_dict()
         return self._post("seqauto/api/v1/qc_exec_summary/",
                           json_data)
 
     def create_multiple_qc_exec_stats(self, qc_exec_stats: List[QCExecStats]):
+        self._validate_list("qc_exec_stats", qc_exec_stats)
         json_data = {
             "records": [
                 qces.to_dict() for qces in qc_exec_stats
@@ -134,6 +190,7 @@ class VariantGridAPI:
                           json_data)
 
     def create_multiple_qc_gene_coverage(self, qc_gene_coverage_list: List[QCGeneCoverage]):
+        self._validate_list("qc_gene_coverage_list", qc_gene_coverage_list)
         json_data = {
             "records": [
                 qcgc.to_dict() for qcgc in qc_gene_coverage_list
