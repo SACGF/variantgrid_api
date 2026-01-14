@@ -1,7 +1,7 @@
 import datetime
 import json
 import logging
-import os
+import urllib
 from enum import Enum
 from typing import List, Optional, Callable
 
@@ -36,7 +36,7 @@ class VariantGridAPI:
         self.log_response = log_response
 
     def _get_url(self, url):
-        return os.path.join(self.server, url)
+        return urllib.parse.urljoin(self.server, url)
 
     def _post(self, path, json_data):
         url = self._get_url(path)
