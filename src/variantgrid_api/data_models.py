@@ -25,6 +25,30 @@ class SequencerModel:
     manufacturer: Manufacturer
     data_naming_convention: str # 'M' or 'H' for (HiSeq only)
 
+    # (prefix, model_name, data_naming_convention)
+    _ILLUMINA_PREFIXES = [
+        ("LH", "NovaSeq X",    "M"),
+        ("NB", "NextSeq",      "M"),
+        ("NS", "NextSeq",      "M"),
+        ("A",  "NovaSeq 6000", "M"),
+        ("H",  "HiSeq",        "H"),
+        ("M",  "MiSeq",        "M"),
+    ]
+
+    @classmethod
+    def from_sequencer_name(cls, sequencer_name: str) -> 'SequencerModel':
+        """Infer SequencerModel from an Illumina sequencer instrument name.
+
+        Illumina instrument names begin with a letter code that identifies the
+        platform (e.g. ``M02027`` → MiSeq, ``A01234`` → NovaSeq 6000).
+        Returns an Unknown model when no prefix matches.
+        """
+        illumina = Manufacturer(name="Illumina")
+        for prefix, model_name, convention in cls._ILLUMINA_PREFIXES:
+            if sequencer_name.startswith(prefix):
+                return cls(model=model_name, manufacturer=illumina, data_naming_convention=convention)
+        return cls(model="Unknown", manufacturer=illumina, data_naming_convention="U")
+
 
 @dataclass_json
 @dataclass
