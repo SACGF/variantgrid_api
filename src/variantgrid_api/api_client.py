@@ -1,15 +1,21 @@
 import datetime
 import json
 import logging
+import re
+import time
 import urllib
 import warnings
 from enum import Enum
-from typing import List, Optional, Callable
+from pathlib import Path
+from typing import List, Optional, Callable, Union
 
 import requests
 
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, JointCalledVCF, \
     SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer
+
+
+_UNSET = object()
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -23,6 +29,14 @@ class EmptyInputPolicy(Enum):
     IGNORE = "ignore"
     WARN = "warn"
     ERROR = "error"
+
+
+class AnnotationError(Exception):
+    """Raised when the server reports an error while importing/annotating an uploaded file."""
+
+    def __init__(self, message, status: Optional[dict] = None):
+        super().__init__(message)
+        self.status = status
 
 
 class VariantGridAPI:
@@ -217,14 +231,23 @@ class VariantGridAPI:
         return self._post("seqauto/api/v1/qc_gene_coverage/bulk_create",
                           json_data)
 
-    def upload_file(self, filename: str):
+    def upload_file(self, filename: str, path=_UNSET):
+        """ Upload a file via multipart POST to upload/api/v1/file_upload.
+
+            Returns {"uploaded_file_id": <id>, "sha256_hash": <hash>, ...}; identify the upload by
+            uploaded_file_id and/or sha256_hash (the server dedups on the content hash).
+
+            path: SeqAuto-only server-side hint that links the upload to a registered sequencing VCF
+                  (JointCalledVCF / SingleSampleVCF) by path. Defaults to `filename` for backwards
+                  compatibility. Pass path=None to omit the query param entirely - required for ad-hoc
+                  uploads such as the annotate/download flow, where sending a client-side path makes
+                  SeqAuto deployments try (and fail) to match it to a registered VCF. """
         url = self._get_url("upload/api/v1/file_upload")
+        if path is _UNSET:
+            path = filename
+        params = {"path": path} if path is not None else {}
         with open(filename, "rb") as f:
-            kwargs = {
-                "files": {"file": f},
-                "params": {"path": filename}
-            }
-            response = requests.post(url, headers=self.headers, **kwargs)
+            response = requests.post(url, headers=self.headers, files={"file": f}, params=params)
             extra_error_message = f"{filename=}"
             return self._handle_json_response(response, extra_error_message)
 
@@ -255,6 +278,141 @@ class VariantGridAPI:
                 found_vcf = True
                 break
         return found_vcf
+
+    ##################################
+    ## Uploaded file annotation flow
+
+    @staticmethod
+    def _upload_key_segment(uploaded_file_id: Optional[int], sha256: Optional[str]) -> str:
+        """ URL segment identifying an uploaded file - by uploaded_file_id (preferred) or its SHA-256 hash. """
+        if uploaded_file_id is not None:
+            return str(uploaded_file_id)
+        if sha256:
+            return f"sha256/{sha256}"
+        raise ValueError("Must provide one of 'uploaded_file_id' or 'sha256'")
+
+    def poll_upload_status(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None) -> dict:
+        """ Single GET of an uploaded file's import/annotation status.
+
+            Keyed by uploaded_file_id (returned from upload_file) or the SHA-256 of the uploaded file.
+            See wait_for_annotation to block until annotation is complete. """
+        segment = self._upload_key_segment(uploaded_file_id, sha256)
+        return self._get(f"upload/api/v1/upload_status/{segment}")
+
+    def wait_for_annotation(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None,
+                            timeout: float = 3600, poll_interval: float = 10, sleep: Callable = time.sleep,
+                            max_transient_errors: int = 5) -> dict:
+        """ Poll poll_upload_status until 'annotation_complete' is true, then return the final status dict.
+
+            Raises AnnotationError if the server reports an 'error', or TimeoutError if 'timeout' seconds elapse.
+            'sleep' is injectable so tests can avoid real delays.
+
+            Transient server hiccups (5xx / connection / timeout - e.g. a brief 500 right after upload while the
+            server is still creating the upload record) are tolerated: up to 'max_transient_errors' *consecutive*
+            failures are retried before giving up. A 4xx response is treated as a real error and raised immediately.
+            The success counter resets whenever a poll succeeds. """
+        deadline = time.monotonic() + timeout
+        transient_errors = 0
+        while True:
+            try:
+                status = self.poll_upload_status(uploaded_file_id=uploaded_file_id, sha256=sha256)
+                transient_errors = 0
+            except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as e:
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+                if status_code is not None and status_code < 500:
+                    raise  # 4xx is a real client error, not a transient blip
+                transient_errors += 1
+                if transient_errors > max_transient_errors:
+                    raise
+                self.logger.warning("Transient error polling upload status (%s/%s), retrying: %s",
+                                    transient_errors, max_transient_errors, e)
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Annotation did not complete within {timeout}s (last error: {e})")
+                sleep(poll_interval)
+                continue
+            if error := status.get("error"):
+                raise AnnotationError(error, status)
+            if status.get("annotation_complete"):
+                return status
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Annotation did not complete within {timeout}s (status={status})")
+            sleep(poll_interval)
+
+    @staticmethod
+    def _attachment_filename(response, export_type: str) -> str:
+        content_disposition = response.headers.get("Content-Disposition", "")
+        if m := re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', content_disposition):
+            return urllib.parse.unquote(m.group(1))
+        ext = ".vcf.gz" if export_type == "vcf" else ".csv.zip"
+        return f"download{ext}"
+
+    def download_annotated(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None,
+                           export_type: str = "vcf", dest_path: Optional[Union[str, Path]] = None,
+                           timeout: float = 3600, poll_interval: float = 10,
+                           sleep: Callable = time.sleep) -> Path:
+        """ Download the cohort-level annotated export of an uploaded VCF, saving it to disk.
+
+            export_type is 'vcf' (gzipped *.vcf.gz) or 'csv' (zipped *.csv.zip). The export covers all samples
+            in the uploaded VCF (single-sample VCFs included).
+
+            The endpoint returns 202 while the file is still being generated - this polls until it is ready (200),
+            then streams the attachment to dest_path. If dest_path is None the server's attachment filename is used
+            in the current directory; if it is an existing directory the attachment filename is placed inside it;
+            otherwise it is treated as the full destination path. Returns the Path written.
+
+            Raises TimeoutError if the file isn't ready within 'timeout' seconds. """
+        if export_type not in ("vcf", "csv"):
+            raise ValueError(f"export_type must be 'vcf' or 'csv', got {export_type!r}")
+        segment = self._upload_key_segment(uploaded_file_id, sha256)
+        url = self._get_url(f"upload/api/v1/download/{segment}/{export_type}")
+        deadline = time.monotonic() + timeout
+        while True:
+            response = requests.get(url, headers=self.headers, stream=True)
+            if response.status_code == 202:
+                if self.log_response:
+                    self.logger.info("Download of '%s' still generating: %s", url, self._safe_json(response))
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Download not ready within {timeout}s (url={url})")
+                sleep(poll_interval)
+                continue
+            if not response.ok:
+                # Raises with logging (JSON 'error' message from the server)
+                self._handle_json_response(response, f"download {export_type} for {segment}")
+            dest = self._resolve_download_dest(dest_path, response, export_type)
+            with open(dest, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            return dest
+
+    def _resolve_download_dest(self, dest_path: Optional[Union[str, Path]], response, export_type: str) -> Path:
+        filename = self._attachment_filename(response, export_type)
+        if dest_path is None:
+            return Path(filename)
+        dest = Path(dest_path)
+        if dest.is_dir():
+            return dest / filename
+        return dest
+
+    @staticmethod
+    def _safe_json(response):
+        try:
+            return response.json()
+        except Exception:
+            return None
+
+    def annotate_vcf(self, filename: str, export_type: str = "vcf", dest_path: Optional[Union[str, Path]] = None,
+                     timeout: float = 3600, poll_interval: float = 10, sleep: Callable = time.sleep) -> Path:
+        """ Convenience one-liner: upload a VCF, wait for annotation to finish, download the annotated export.
+
+            Chains upload_file -> wait_for_annotation -> download_annotated and returns the Path written. """
+        # path is SeqAuto-only and makes ad-hoc uploads fail the import - omit it for the annotate flow
+        upload = self.upload_file(filename, path=None)
+        uploaded_file_id = upload["uploaded_file_id"]
+        self.wait_for_annotation(uploaded_file_id=uploaded_file_id,
+                                 timeout=timeout, poll_interval=poll_interval, sleep=sleep)
+        return self.download_annotated(uploaded_file_id=uploaded_file_id, export_type=export_type,
+                                       dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep)
 
 
 

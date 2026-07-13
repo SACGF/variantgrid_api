@@ -1,13 +1,25 @@
-## [unreleased]
+## [1.3.0] - 2026-07-13
 
 ### Added
 
+- [Poll VCF upload status + download annotated VCF/CSV](https://github.com/SACGF/variantgrid_api/issues/17) - New client methods `poll_upload_status()`, `wait_for_annotation()`, `download_annotated()`, and a convenience `annotate_vcf()` wrapper that chains upload → wait → download. Keyed by `uploaded_file_id` or `sha256`. Matches server endpoints added in SACGF/variantgrid#1640. `wait_for_annotation()` tolerates transient 5xx/connection errors while polling (e.g. a brief 500 right after upload).
+
+### Changed
+
+- `upload_file()` now accepts `path=None` to omit the `path` query param. `path` is a SeqAuto-only backend-link hint; sending a client-side path makes SeqAuto deployments try (and fail) to match a registered VCF, so ad-hoc uploads (including `annotate_vcf()`) omit it. Default behaviour is unchanged (still sends `path=filename`).
 - [Rename SampleSheetCombinedVCFFile → JointCalledVCF (deprecation)](https://github.com/SACGF/variantgrid_api/issues/16) - New canonical `JointCalledVCF` / `SingleSampleVCF` dataclasses and `create_joint_called_vcf()` client method (POSTs to `seqauto/api/v1/joint_called_vcf/`).
 
 ### Deprecated
 
 - `SampleSheetCombinedVCFFile` (use `JointCalledVCF`) and `VCFFile` (use `SingleSampleVCF`) - kept as aliases that emit `DeprecationWarning` on instantiation.
 - `create_sample_sheet_combined_vcf_file()` (use `create_joint_called_vcf()`) - kept as a wrapper that emits `DeprecationWarning` and delegates to the new method.
+
+## [1.2.0] - 2026-03-11
+
+### Added
+
+- [Mock VariantGridAPI](https://github.com/SACGF/variantgrid_api/issues/14) - `MockVariantGridAPI` for testing against the client without a live server.
+- [Data naming convention helper method](https://github.com/SACGF/variantgrid_api/issues/15)
 
 ## [1.1.1] - 2026-01-14
 

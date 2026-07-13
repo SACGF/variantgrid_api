@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import copy
 import warnings
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
+
+_UNSET = object()
 
 
 class MockVariantGridAPI:
@@ -132,9 +135,46 @@ class MockVariantGridAPI:
         self._record("create_multiple_qc_gene_coverage", qc_gene_coverage_list)
         return self._ret("create_multiple_qc_gene_coverage", {"created": len(qc_gene_coverage_list)})
 
-    def upload_file(self, filename):
-        self._record("upload_file", filename)
-        return self._ret("upload_file", {"path": filename, "status": "ok"})
+    def upload_file(self, filename, path=_UNSET):
+        if path is _UNSET:
+            path = filename
+        self._record("upload_file", filename, path=path)
+        return self._ret("upload_file", {"uploaded_file_id": 1, "sha256_hash": "deadbeef",
+                                         "path": path, "status": "ok"})
+
+    def poll_upload_status(self, uploaded_file_id=None, sha256=None):
+        self._record("poll_upload_status", uploaded_file_id, sha256)
+        return self._ret("poll_upload_status", {
+            "uploaded_file_id": uploaded_file_id,
+            "sha256_hash": sha256,
+            "annotation_complete": True,
+            "error": None,
+        })
+
+    def wait_for_annotation(self, uploaded_file_id=None, sha256=None,
+                            timeout=3600, poll_interval=10, sleep=None, max_transient_errors=5):
+        self._record("wait_for_annotation", uploaded_file_id, sha256,
+                     timeout=timeout, poll_interval=poll_interval, sleep=sleep,
+                     max_transient_errors=max_transient_errors)
+        return self._ret("wait_for_annotation", {
+            "uploaded_file_id": uploaded_file_id,
+            "annotation_complete": True,
+            "error": None,
+        })
+
+    def download_annotated(self, uploaded_file_id=None, sha256=None, export_type="vcf",
+                           dest_path=None, timeout=3600, poll_interval=10, sleep=None):
+        self._record("download_annotated", uploaded_file_id, sha256, export_type=export_type,
+                     dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep)
+        default = Path(dest_path) if dest_path is not None else Path(f"download.{export_type}")
+        return self._ret("download_annotated", default)
+
+    def annotate_vcf(self, filename, export_type="vcf", dest_path=None,
+                     timeout=3600, poll_interval=10, sleep=None):
+        self._record("annotate_vcf", filename, export_type=export_type, dest_path=dest_path,
+                     timeout=timeout, poll_interval=poll_interval, sleep=sleep)
+        default = Path(dest_path) if dest_path is not None else Path(f"download.{export_type}")
+        return self._ret("annotate_vcf", default)
 
     def sequencing_run_has_vcf(self, sequencing_run, path=None):
         self._record("sequencing_run_has_vcf", sequencing_run, path)

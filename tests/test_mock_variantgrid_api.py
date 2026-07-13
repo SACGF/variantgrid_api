@@ -115,6 +115,34 @@ def test_create_sample_sheet_combined_vcf_file_deprecated_alias(mock_api, vg_obj
 
 
 # ------------------------------------------------------------------ #
+# Uploaded file annotation flow                                        #
+# ------------------------------------------------------------------ #
+
+def test_mock_poll_upload_status_records_and_returns(mock_api):
+    result = mock_api.poll_upload_status(uploaded_file_id=123)
+    mock_api.assert_called_once("poll_upload_status")
+    assert result["annotation_complete"] is True
+
+
+def test_mock_wait_for_annotation_records_and_returns(mock_api):
+    result = mock_api.wait_for_annotation(uploaded_file_id=123)
+    mock_api.assert_called_once("wait_for_annotation")
+    assert result["annotation_complete"] is True
+
+
+def test_mock_download_annotated_defaults_to_dest_path(mock_api):
+    result = mock_api.download_annotated(uploaded_file_id=123, dest_path="/tmp/out.vcf.gz")
+    mock_api.assert_called_once("download_annotated")
+    assert str(result) == "/tmp/out.vcf.gz"
+
+
+def test_mock_annotate_vcf_records_and_returns(mock_api):
+    result = mock_api.annotate_vcf("input.vcf", export_type="csv")
+    mock_api.assert_called_once("annotate_vcf")
+    assert str(result) == "download.csv"
+
+
+# ------------------------------------------------------------------ #
 # set_return overrides                                                 #
 # ------------------------------------------------------------------ #
 
