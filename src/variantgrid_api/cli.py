@@ -46,6 +46,27 @@ def _is_not_found(exc):
     return resp is not None and resp.status_code == 404
 
 
+def _probe_status(api, logger, sha256):
+    """Poll status by content hash. Returns the status dict, or None if the server has never
+    seen this file (404) - a 404 here just means "not uploaded yet", so we silence its logging."""
+    prev_level = logger.level
+    logger.setLevel(logging.CRITICAL)
+    try:
+        return api.poll_upload_status(sha256=sha256)
+    except requests.HTTPError as e:
+        if _is_not_found(e):
+            return None
+        raise
+    finally:
+        logger.setLevel(prev_level)
+
+
+def _download(api, args, sha256):
+    path = api.download_annotated(sha256=sha256, export_type=args.export_type, dest_path=args.dest)
+    print(f"Annotated {args.export_type} written to {path}")
+    return EXIT_OK
+
+
 def annotate_vcf_cmd(args):
     if not os.path.isfile(args.vcf):
         print(f"No such file: {args.vcf}", file=sys.stderr)
@@ -53,38 +74,30 @@ def annotate_vcf_cmd(args):
 
     api, logger = _build_api(args)
     name = os.path.basename(args.vcf)
-
-    if args.wait:
-        # Blocking one-shot: upload, wait (can take hours), download.
-        path = api.annotate_vcf(args.vcf, export_type=args.export_type, dest_path=args.dest,
-                                poll_interval=args.poll_interval)
-        print(f"Annotated {args.export_type} written to {path}")
-        return EXIT_OK
-
     sha256 = _sha256(args.vcf)
 
-    # Probe by content hash. A 404 means we've never uploaded this file - so upload it now.
-    prev_level = logger.level
-    logger.setLevel(logging.CRITICAL)  # the probe 404 is expected; don't scare the user
-    try:
-        status = api.poll_upload_status(sha256=sha256)
-    except requests.HTTPError as e:
-        if _is_not_found(e):
-            up = api.upload_file(args.vcf, path=None)
-            print(f"Uploaded {name} (id={up['uploaded_file_id']}). "
-                  f"Annotating - run the same command again later to download.")
-            return EXIT_PENDING
-        raise
-    finally:
-        logger.setLevel(prev_level)
+    status = _probe_status(api, logger, sha256)
+    if status is None:
+        # We've never uploaded this file - do it now.
+        up = api.upload_file(args.vcf, path=None)
+        print(f"Uploaded {name} (id={up['uploaded_file_id']}).")
 
+    if args.wait:
+        # Poll the server ourselves until annotation finishes (can take hours), then download.
+        if status is None or not status.get("annotation_complete"):
+            print("Waiting for annotation to finish - this can take a while...")
+            api.wait_for_annotation(sha256=sha256, timeout=args.timeout, poll_interval=args.poll_interval)
+        return _download(api, args, sha256)
+
+    # Single-shot: report where it's at, download only if it's ready.
+    if status is None:
+        print(f"Annotating {name} - run the same command again later to download.")
+        return EXIT_PENDING
     if err := status.get("error"):
         print(f"{name}: annotation error - {err}", file=sys.stderr)
         return EXIT_ERROR
     if status.get("annotation_complete"):
-        path = api.download_annotated(sha256=sha256, export_type=args.export_type, dest_path=args.dest)
-        print(f"Annotated {args.export_type} written to {path}")
-        return EXIT_OK
+        return _download(api, args, sha256)
 
     progress = status.get("progress_percent")
     suffix = f" (progress {progress}%)" if progress is not None else ""
@@ -113,9 +126,12 @@ def build_parser():
     p.add_argument("-o", "--dest", default=".",
                    help="Destination directory or file for the download (default: current directory)")
     p.add_argument("--wait", action="store_true",
-                   help="Block until annotation finishes, then download (can take hours)")
+                   help="Poll until annotation finishes and download it, instead of returning immediately "
+                        "(can take hours)")
     p.add_argument("--poll-interval", type=float, default=10,
                    help="Seconds between status polls when using --wait (default: 10)")
+    p.add_argument("--timeout", type=float, default=86400,
+                   help="Give up after this many seconds when using --wait (default: 86400 = 24h)")
     p.set_defaults(func=annotate_vcf_cmd)
     return parser
 

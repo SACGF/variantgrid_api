@@ -1,3 +1,9 @@
+## [1.3.2] - 2026-07-13
+
+### Added
+
+- `vg_api annotate_vcf --wait` polls until annotation finishes and downloads it, so you don't need to loop the command yourself.
+
 ## [1.3.1] - 2026-07-13
 
 ### Added

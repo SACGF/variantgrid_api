@@ -25,23 +25,25 @@ result = api.create_enrichment_kit(enrichment_kit)
 
 ## Annotate a VCF and download it back
 
-Upload a VCF, wait for VariantGrid to import + annotate any novel variants, then download the
-cohort-level annotated export (all samples, single-sample VCFs included). The whole flow is a one-liner:
+Upload a VCF, have VariantGrid import + annotate any novel variants, then download the cohort-level annotated
+export (all samples, single-sample VCFs included). Annotation can take a while, so the quickest way in is the
+`vg_api` command line tool: the first call uploads, and running the same command again downloads the result
+once it's ready.
 
-```python
-from variantgrid_api.api_client import VariantGridAPI
+```console
+$ export VARIANTGRID_API_TOKEN=YOUR_API_TOKEN
+$ vg_api annotate_vcf input.vcf.gz -o results/
+Uploaded input.vcf.gz (id=13256).
+Annotating input.vcf.gz - run the same command again later to download.
 
-api = VariantGridAPI(server="https://variantgrid.com", api_token="YOUR_API_TOKEN")
-
-# export_type is "vcf" (gzipped *.vcf.gz) or "csv" (zipped *.csv.zip)
-path = api.annotate_vcf("input.vcf", export_type="vcf", dest_path="/data/results/")
-print(f"Annotated VCF written to {path}")
+$ vg_api annotate_vcf input.vcf.gz -o results/        # once it's done
+Annotated vcf written to results/input.vcf_annotated_v254_GRCh38.vcf.gz
 ```
 
-There's also a `vg_api annotate_vcf` command line tool (first call uploads, run it again to download once
-ready), a step-by-step form (`upload_file` → `wait_for_annotation` → `download_annotated`), and a "submit now,
-download later" pattern for long-running jobs. See
-**[Annotate a VCF](https://github.com/SACGF/variantgrid_api/wiki/Annotate-a-VCF)** on the wiki.
+From Python it's `upload_file()` / `poll_upload_status()` / `download_annotated()`, or the blocking
+`annotate_vcf()` one-liner. See
+**[Annotate a VCF](https://github.com/SACGF/variantgrid_api/wiki/Annotate-a-VCF)** on the wiki for batches, the
+submit-now/download-later pattern, and all the options.
 
 ## Testing
 

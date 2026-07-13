@@ -87,6 +87,35 @@ def test_csv_export_type(vcf, tmp_path):
     assert download_call.request.url.endswith("/csv")
 
 
+@responses.activate
+def test_wait_uploads_polls_then_downloads(vcf, tmp_path):
+    """--wait on a new file: upload, poll until complete, then download - no external loop."""
+    responses.add(responses.GET, STATUS_RE, json={"detail": "not found"}, status=404)  # probe
+    responses.add(responses.POST, UPLOAD_URL, json={"uploaded_file_id": 7}, status=200)
+    responses.add(responses.GET, STATUS_RE, json={"annotation_complete": False, "error": None}, status=200)
+    responses.add(responses.GET, STATUS_RE, json={"annotation_complete": True, "error": None}, status=200)
+    responses.add(responses.GET, DOWNLOAD_RE, body=b"data", status=200,
+                  headers={"Content-Disposition": 'attachment; filename="out.vcf.gz"'})
+
+    rc = cli.main(_argv(vcf, "--wait", "-o", str(tmp_path), "--poll-interval", "0"))
+
+    assert rc == cli.EXIT_OK
+    assert (tmp_path / "out.vcf.gz").read_bytes() == b"data"
+
+
+@responses.activate
+def test_wait_downloads_without_reupload_when_already_known(vcf, tmp_path):
+    """--wait on an already-uploaded, already-complete file must not re-upload."""
+    responses.add(responses.GET, STATUS_RE, json={"annotation_complete": True, "error": None}, status=200)
+    responses.add(responses.GET, DOWNLOAD_RE, body=b"data", status=200,
+                  headers={"Content-Disposition": 'attachment; filename="out.vcf.gz"'})
+
+    rc = cli.main(_argv(vcf, "--wait", "-o", str(tmp_path), "--poll-interval", "0"))
+
+    assert rc == cli.EXIT_OK
+    assert not any(c.request.method == "POST" for c in responses.calls)
+
+
 def test_missing_file_is_error(tmp_path):
     rc = cli.main(_argv(str(tmp_path / "nope.vcf")))
     assert rc == cli.EXIT_ERROR
