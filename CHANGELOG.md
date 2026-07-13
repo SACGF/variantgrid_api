@@ -1,3 +1,9 @@
+## [1.3.1] - 2026-07-13
+
+### Added
+
+- `vg_api` command line tool with an `annotate_vcf` subcommand: first call uploads a VCF, running it again downloads the annotated result once ready.
+
 ## [1.3.0] - 2026-07-13
 
 ### Added

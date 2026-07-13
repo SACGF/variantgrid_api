@@ -38,9 +38,10 @@ path = api.annotate_vcf("input.vcf", export_type="vcf", dest_path="/data/results
 print(f"Annotated VCF written to {path}")
 ```
 
-For more control there's also a step-by-step form (`upload_file` → `wait_for_annotation` →
-`download_annotated`), a way to inspect raw status, and a "submit now, download later" pattern for long-running
-jobs. See **[Annotate a VCF](https://github.com/SACGF/variantgrid_api/wiki/Annotate-a-VCF)** on the wiki.
+There's also a `vg_api annotate_vcf` command line tool (first call uploads, run it again to download once
+ready), a step-by-step form (`upload_file` → `wait_for_annotation` → `download_annotated`), and a "submit now,
+download later" pattern for long-running jobs. See
+**[Annotate a VCF](https://github.com/SACGF/variantgrid_api/wiki/Annotate-a-VCF)** on the wiki.
 
 ## Testing
 
