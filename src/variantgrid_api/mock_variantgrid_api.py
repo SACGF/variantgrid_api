@@ -13,6 +13,7 @@ Usage::
 from __future__ import annotations
 
 import copy
+import warnings
 from typing import Any, List, Optional, Tuple
 
 
@@ -93,7 +94,17 @@ class MockVariantGridAPI:
         self._record("create_sample_sheet", sample_sheet)
         return self._ret("create_sample_sheet", {"path": sample_sheet.path})
 
+    def create_joint_called_vcf(self, joint_called_vcf):
+        self._record("create_joint_called_vcf", joint_called_vcf)
+        return self._ret("create_joint_called_vcf", {"path": joint_called_vcf.path})
+
     def create_sample_sheet_combined_vcf_file(self, sscvf):
+        """Deprecated alias for :meth:`create_joint_called_vcf` - use that instead. """
+        warnings.warn(
+            "create_sample_sheet_combined_vcf_file is deprecated; use create_joint_called_vcf instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._record("create_sample_sheet_combined_vcf_file", sscvf)
         return self._ret("create_sample_sheet_combined_vcf_file", {"path": sscvf.path})
 

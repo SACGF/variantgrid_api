@@ -2,12 +2,13 @@ import datetime
 import json
 import logging
 import urllib
+import warnings
 from enum import Enum
 from typing import List, Optional, Callable
 
 import requests
 
-from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, SampleSheetCombinedVCFFile, \
+from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, JointCalledVCF, \
     SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer
 
 
@@ -136,11 +137,20 @@ class VariantGridAPI:
         return self._post("seqauto/api/v1/sample_sheet/",
                           json_data)
 
-    def create_sample_sheet_combined_vcf_file(self, sample_sheet_combined_vcf_file: SampleSheetCombinedVCFFile):
-        self._validate_object("sample_sheet_combined_vcf_file", sample_sheet_combined_vcf_file)
-        json_data = sample_sheet_combined_vcf_file.to_dict()
-        return self._post("seqauto/api/v1/sample_sheet_combined_vcf_file/",
+    def create_joint_called_vcf(self, joint_called_vcf: JointCalledVCF):
+        self._validate_object("joint_called_vcf", joint_called_vcf)
+        json_data = joint_called_vcf.to_dict()
+        return self._post("seqauto/api/v1/joint_called_vcf/",
                           json_data)
+
+    def create_sample_sheet_combined_vcf_file(self, sample_sheet_combined_vcf_file: JointCalledVCF):
+        """Deprecated alias for :meth:`create_joint_called_vcf` - use that instead. """
+        warnings.warn(
+            "create_sample_sheet_combined_vcf_file is deprecated; use create_joint_called_vcf instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.create_joint_called_vcf(sample_sheet_combined_vcf_file)
 
     def create_sequencing_data(self, sample_sheet_lookup: SampleSheetLookup, sequencing_files: List[SequencingFile]):
         self._validate_object("sample_sheet_lookup", sample_sheet_lookup)

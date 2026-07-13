@@ -6,7 +6,7 @@ import pytest
 from variantgrid_api.api_client import VariantGridAPI
 from variantgrid_api.data_models import (
     EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, SampleSheet,
-    SampleSheetCombinedVCFFile, VariantCaller, SampleSheetLookup, Aligner, VCFFile, BamFile,
+    JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile,
     SequencingFile, SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer
 )
 
@@ -62,7 +62,7 @@ def vg_objects(data_dir):
 
     variant_caller_var_dict = VariantCaller(name="VarDict", version="1.8.2")
     combo_vcf_filename = seq_run_path(f"2_variants/{SEQUENCING_RUN_NAME}.vardict.hg38.vcf.gz")
-    sample_sheet_combined_vcf_file = SampleSheetCombinedVCFFile(
+    joint_called_vcf = JointCalledVCF(
         path=combo_vcf_filename, sample_sheet_lookup=sample_sheet_lookup, variant_caller=variant_caller_var_dict
     )
 
@@ -73,10 +73,10 @@ def vg_objects(data_dir):
     single_sample_vcf_filename_2 = seq_run_path("2_variants/gatk_per_sample/fake_sample_2.gatk.hg38.vcf.gz")
 
     bam_file_1 = BamFile(path=seq_run_path("1_BAM/fake_sample_1.hg38.bam"), aligner=aligner)
-    vcf_file_1 = VCFFile(path=single_sample_vcf_filename_1, variant_caller=variant_caller_gatk)
+    vcf_file_1 = SingleSampleVCF(path=single_sample_vcf_filename_1, variant_caller=variant_caller_gatk)
 
     bam_file_2 = BamFile(path=seq_run_path("1_BAM/fake_sample_2.hg38.bam"), aligner=aligner)
-    vcf_file_2 = VCFFile(path=single_sample_vcf_filename_2, variant_caller=variant_caller_gatk)
+    vcf_file_2 = SingleSampleVCF(path=single_sample_vcf_filename_2, variant_caller=variant_caller_gatk)
 
     sequencing_files = [
         SequencingFile(sample_name="fake_sample_1",
@@ -153,7 +153,7 @@ def vg_objects(data_dir):
         sequencing_run=sequencing_run,
         sample_sheet=sample_sheet,
         sample_sheet_lookup=sample_sheet_lookup,
-        sample_sheet_combined_vcf_file=sample_sheet_combined_vcf_file,
+        joint_called_vcf=joint_called_vcf,
         sequencing_files=sequencing_files,
         qc_gene_lists=qc_gene_lists,
         qc_exec_stats=qc_exec_stats,

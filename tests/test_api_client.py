@@ -88,15 +88,26 @@ def test_create_sequencing_run_posts_json(api, server, vg_objects):
 
 
 @responses.activate
-def test_create_sample_sheet_combined_vcf_file_posts_json(api, server, vg_objects):
-    url = f"{server}/seqauto/api/v1/sample_sheet_combined_vcf_file/"
+def test_create_joint_called_vcf_posts_json(api, server, vg_objects):
+    url = f"{server}/seqauto/api/v1/joint_called_vcf/"
     body = assert_post(
-        lambda: api.create_sample_sheet_combined_vcf_file(
-            vg_objects["sample_sheet_combined_vcf_file"]
+        lambda: api.create_joint_called_vcf(
+            vg_objects["joint_called_vcf"]
         ),
         url
     )
     assert body["path"].endswith(".vcf.gz")
+
+
+@responses.activate
+def test_create_sample_sheet_combined_vcf_file_is_deprecated_alias(api, server, vg_objects):
+    """The deprecated alias should warn but still POST to the canonical joint_called_vcf endpoint."""
+    url = f"{server}/seqauto/api/v1/joint_called_vcf/"
+    responses.add(responses.POST, url, json={"ok": True}, status=200)
+    with pytest.warns(DeprecationWarning):
+        out = api.create_sample_sheet_combined_vcf_file(vg_objects["joint_called_vcf"])
+    assert out == {"ok": True}
+    assert responses.calls[-1].request.url == url
 
 
 @responses.activate

@@ -11,7 +11,7 @@ import csv
 
 from variantgrid_api.api_client import VariantGridAPI
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SequencingSample, SampleSheet, \
-    SampleSheetCombinedVCFFile, VariantCaller, SampleSheetLookup, Aligner, VCFFile, BamFile, SequencingFile, \
+    JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile, SequencingFile, \
     SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage
 
 
@@ -233,7 +233,7 @@ def run_api(server, api_token, step=None):
 
     variant_caller_var_dict = VariantCaller(name="VarDict", version="1.8.2")
     combo_vcf_filename = seq_run_path(f"2_variants/{BATCHID}.vardict.hg38.vcf.gz")
-    sample_sheet_combined_vcf_file = SampleSheetCombinedVCFFile(
+    joint_called_vcf = JointCalledVCF(
         path=combo_vcf_filename,
         sample_sheet_lookup=sample_sheet_lookup,
         variant_caller=variant_caller_var_dict)
@@ -243,7 +243,7 @@ def run_api(server, api_token, step=None):
     bam_file = BamFile(
         path=seq_run_path(f"1_BAM/{SAMPLE}.hg38.bam"),
         aligner=aligner)
-    vcf_file = VCFFile(
+    vcf_file = SingleSampleVCF(
         path=seq_run_path(f"2_variants/gatk_per_sample/{SAMPLE}.gatk.hg38.vcf.gz"),
         variant_caller=variant_caller_gatk)
 
@@ -376,8 +376,8 @@ def run_api(server, api_token, step=None):
         "enrichment_kit": lambda: enrichment_kit_response,
         "sequencing_run": lambda: vg_api.create_sequencing_run(sequencing_run),
         "sample_sheet": lambda: vg_api.create_sample_sheet(sample_sheet),
-        "sample_sheet_combined_vcf_file": lambda: vg_api.create_sample_sheet_combined_vcf_file(
-            sample_sheet_combined_vcf_file),
+        "joint_called_vcf": lambda: vg_api.create_joint_called_vcf(
+            joint_called_vcf),
         "sequencing_data": lambda: vg_api.create_sequencing_data(sample_sheet_lookup, sequencing_files),
         "qc_gene_list": lambda: vg_api.create_qc_gene_list(qc_gene_lists[0]),
         #"qc_gene_lists": lambda: vg_api.create_multiple_qc_gene_lists(qc_gene_lists), ##creates multiple gene lists, we don't need this since we are doing one sample at a time

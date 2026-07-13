@@ -1,4 +1,5 @@
 import re
+import warnings
 from datetime import date, datetime
 from dataclasses import dataclass, field
 from typing import Optional, List
@@ -133,10 +134,23 @@ class VariantCaller:
 
 @dataclass_json
 @dataclass
-class SampleSheetCombinedVCFFile:
+class JointCalledVCF:
+    """A joint-called multi-sample VCF (mirrors the server ``JointCalledVCF`` model). """
     path: str
     sample_sheet_lookup: SampleSheetLookup = field(metadata=config(field_name="sample_sheet"))
     variant_caller: VariantCaller
+
+
+@dataclass_json
+@dataclass
+class SampleSheetCombinedVCFFile(JointCalledVCF):
+    """Deprecated alias for :class:`JointCalledVCF` - use that instead. """
+    def __post_init__(self):
+        warnings.warn(
+            "SampleSheetCombinedVCFFile is deprecated; use JointCalledVCF instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 @dataclass_json
@@ -148,9 +162,22 @@ class BamFile:
 
 @dataclass_json
 @dataclass
-class VCFFile:
+class SingleSampleVCF:
+    """A per-sample VCF - one BAM in, one VCF out (mirrors the server ``SingleSampleVCF`` model). """
     path: str
     variant_caller: Optional[VariantCaller] = field(default=None, metadata=config(exclude=lambda x: x is None))
+
+
+@dataclass_json
+@dataclass
+class VCFFile(SingleSampleVCF):
+    """Deprecated alias for :class:`SingleSampleVCF` - use that instead. """
+    def __post_init__(self):
+        warnings.warn(
+            "VCFFile is deprecated; use SingleSampleVCF instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 @dataclass_json
@@ -160,7 +187,7 @@ class SequencingFile:
     fastq_r1: str
     fastq_r2: str
     bam_file: BamFile
-    vcf_file: VCFFile
+    vcf_file: SingleSampleVCF
 
 
 @dataclass_json
@@ -179,7 +206,7 @@ class QC:
      """
     sequencing_sample_lookup: SequencingSampleLookup = field(metadata=config(field_name="sequencing_sample"))
     bam_file: BamFile
-    vcf_file: VCFFile
+    vcf_file: SingleSampleVCF
 
 
 @dataclass_json

@@ -99,6 +99,21 @@ def test_default_return_create_multiple_qc_gene_lists(mock_api, vg_objects):
     assert result == {"created": len(vg_objects["qc_gene_lists"])}
 
 
+def test_create_joint_called_vcf_records_and_returns(mock_api, vg_objects):
+    jcv = vg_objects["joint_called_vcf"]
+    result = mock_api.create_joint_called_vcf(jcv)
+    mock_api.assert_called_once("create_joint_called_vcf")
+    assert result == {"path": jcv.path}
+
+
+def test_create_sample_sheet_combined_vcf_file_deprecated_alias(mock_api, vg_objects):
+    jcv = vg_objects["joint_called_vcf"]
+    with pytest.warns(DeprecationWarning):
+        result = mock_api.create_sample_sheet_combined_vcf_file(jcv)
+    mock_api.assert_called_once("create_sample_sheet_combined_vcf_file")
+    assert result == {"path": jcv.path}
+
+
 # ------------------------------------------------------------------ #
 # set_return overrides                                                 #
 # ------------------------------------------------------------------ #
