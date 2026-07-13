@@ -38,28 +38,9 @@ path = api.annotate_vcf("input.vcf", export_type="vcf", dest_path="/data/results
 print(f"Annotated VCF written to {path}")
 ```
 
-Or drive each step yourself:
-
-```python
-# For ad-hoc uploads pass path=None so the upload isn't treated as a SeqAuto backend-link hint
-upload = api.upload_file("input.vcf", path=None)
-uploaded_file_id = upload["uploaded_file_id"]           # or upload["sha256_hash"]
-api.wait_for_annotation(uploaded_file_id, timeout=3600, poll_interval=10)  # raises on error/timeout
-path = api.download_annotated(uploaded_file_id, export_type="csv", dest_path="/data/results/")
-```
-
-`poll_upload_status(uploaded_file_id)` returns the raw status dict (including `annotation_complete`,
-`progress_percent`, `error`, `vcf_id`, `samples`, ...) if you want to inspect progress directly. All of
-these accept `sha256=<hash>` instead of `uploaded_file_id` - the server dedups on the content hash, so it is
-stable across machines and useful if you didn't retain the id.
-
-Notes:
-
-- The `annotate_vcf` wrapper already uploads with `path=None`. Only pass a `path` to `upload_file` for SeqAuto
-  uploads that link to a registered `JointCalledVCF` / `SingleSampleVCF` (that is what `path` is for - it is
-  ignored on non-SeqAuto deployments).
-- Downloads require the target deployment to have the cohort export analysis templates configured
-  (`ANALYSIS_TEMPLATES_AUTO_COHORT_EXPORT`) - otherwise a clear error is returned.
+For more control there's also a step-by-step form (`upload_file` → `wait_for_annotation` →
+`download_annotated`), a way to inspect raw status, and a "submit now, download later" pattern for long-running
+jobs. See **[Annotate a VCF](https://github.com/SACGF/variantgrid_api/wiki/Annotate-a-VCF)** on the wiki.
 
 ## Testing
 
