@@ -1,3 +1,13 @@
+## [1.4.0] - 2026-08-07
+
+### Added
+
+- [Joint-called VCFs whose samples span sequencing runs](https://github.com/SACGF/variantgrid_api/issues/19) - `JointCalledVCF` takes an optional `sequencing_samples` list of `SequencingSampleLookup`, so a family trio joint-called from samples sequenced on different runs links all of its members. `sample_sheet_lookup` stays the owning run (the one the VCF path sits under). Requires the matching server support in SACGF/variantgrid, and each contributing run's sample sheet must be sent before the joint call. Asked for in SACGF/variantgrid_sapath#415; see `examples/example_cross_run_trio.py`.
+
+### Changed
+
+- `JointCalledVCF` omits `sequencing_samples` from the posted JSON when it is unset, so a single-run joint call sends exactly the payload it did before and the server keeps deriving members from the owning sample sheet.
+
 ## [1.3.2] - 2026-07-13
 
 ### Added

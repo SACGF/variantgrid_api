@@ -97,6 +97,26 @@ def test_create_joint_called_vcf_posts_json(api, server, vg_objects):
         url
     )
     assert body["path"].endswith(".vcf.gz")
+    # A single-run joint call leaves the key off entirely, so the server keeps its existing behaviour
+    assert "sequencing_samples" not in body
+
+
+@responses.activate
+def test_create_joint_called_vcf_posts_cross_run_members(api, server, vg_objects):
+    url = f"{server}/seqauto/api/v1/joint_called_vcf/"
+    body = assert_post(
+        lambda: api.create_joint_called_vcf(
+            vg_objects["cross_run_joint_called_vcf"]
+        ),
+        url
+    )
+    members = body["sequencing_samples"]
+    assert [m["sample_name"] for m in members] == ["fake_sample_1", "fake_sample_mum", "fake_sample_dad"]
+    # Members carry their own sample sheet, so two of them point at the run that sequenced the parents
+    runs = {m["sample_sheet"]["sequencing_run"] for m in members}
+    assert len(runs) == 2
+    # The owning sheet is still the run the path sits under
+    assert body["sample_sheet"]["sequencing_run"] == vg_objects["SEQUENCING_RUN_NAME"]
 
 
 @responses.activate

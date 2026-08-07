@@ -66,6 +66,21 @@ def vg_objects(data_dir):
         path=combo_vcf_filename, sample_sheet_lookup=sample_sheet_lookup, variant_caller=variant_caller_var_dict
     )
 
+    # A family trio joint-called from samples sequenced on two different runs. The owning sheet is
+    # the run the path sits under; the parent is named against the run that actually sequenced them.
+    other_sample_sheet_lookup = SampleSheetLookup(sequencing_run="Haem_21_001_210301_M02027_0113_000000000_KGH80",
+                                                 hash="b31c0e5a6dbb8f9c1e4f7a2d3c5b6e80")
+    cross_run_joint_called_vcf = JointCalledVCF(
+        path=seq_run_path("2_variants/family_trio.vardict.hg38.vcf.gz"),
+        sample_sheet_lookup=sample_sheet_lookup,
+        variant_caller=variant_caller_var_dict,
+        sequencing_samples=[
+            SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup, sample_name="fake_sample_1"),
+            SequencingSampleLookup(sample_sheet_lookup=other_sample_sheet_lookup, sample_name="fake_sample_mum"),
+            SequencingSampleLookup(sample_sheet_lookup=other_sample_sheet_lookup, sample_name="fake_sample_dad"),
+        ],
+    )
+
     aligner = Aligner(name="BWA", version="0.7.18")
     variant_caller_gatk = VariantCaller(name="GATK", version="4.1.9.0")
 
@@ -154,6 +169,7 @@ def vg_objects(data_dir):
         sample_sheet=sample_sheet,
         sample_sheet_lookup=sample_sheet_lookup,
         joint_called_vcf=joint_called_vcf,
+        cross_run_joint_called_vcf=cross_run_joint_called_vcf,
         sequencing_files=sequencing_files,
         qc_gene_lists=qc_gene_lists,
         qc_exec_stats=qc_exec_stats,
