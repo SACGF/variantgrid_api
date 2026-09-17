@@ -67,7 +67,7 @@ name it by a LIMS identifier instead. See `examples/example_tso500.py` for a ful
 ## Talking to more than one VariantGrid version
 
 Servers of different ages accept different calls. The client asks the server which features it has
-(`GET seqauto/api/v1/capabilities`, fetched once on first use), and each call that needs a newer server
+(`GET api/v1/capabilities`, fetched once on first use), and each call that needs a newer server
 checks that list first: the patient / specimen / extraction calls, specimen measures,
 `link_sequencing_sample_extraction`, the annotate flow (`poll_upload_status`, `wait_for_annotation`,
 `download_annotated`, `annotate_vcf`), and `upload_file` with `metadata` or `file_type`. A server without the

@@ -444,7 +444,7 @@ class SpecimenMeasure:
 
 @dataclass(frozen=True)
 class ServerCapabilities:
-    """ What a server accepts, from GET seqauto/api/v1/capabilities (SACGF/variantgrid_sapath#443).
+    """ What a server accepts, from GET api/v1/capabilities (SACGF/variantgrid_sapath#443).
 
         A server without that endpoint (404) is LEGACY: version 'legacy', no features, no upload file types """
     LEGACY: ClassVar["ServerCapabilities"]

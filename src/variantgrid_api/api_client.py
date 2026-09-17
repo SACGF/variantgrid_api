@@ -147,12 +147,14 @@ class VariantGridAPI:
     @property
     def capabilities(self) -> ServerCapabilities:
         """ Fetched on first use then cached, so constructing the client and ungated calls do no extra
-            request. A server without the endpoint (404) is ServerCapabilities.LEGACY """
+            request. A server without the endpoint is ServerCapabilities.LEGACY - it answers 404, or a redirect
+            to its login page when its login middleware doesn't exempt /api/ (so redirects aren't followed) """
         if self._capabilities is None:
-            url = self._get_url("seqauto/api/v1/capabilities")
-            response = requests.get(url, headers=self.headers)
-            if response.status_code == 404:
-                self.logger.info("Server has no capabilities endpoint (404) - treating as legacy")
+            url = self._get_url("api/v1/capabilities")
+            response = requests.get(url, headers=self.headers, allow_redirects=False)
+            if response.status_code == 404 or response.is_redirect:
+                self.logger.info("Server has no capabilities endpoint (HTTP %s) - treating as legacy",
+                                 response.status_code)
                 self._capabilities = ServerCapabilities.LEGACY
             else:
                 data = self._handle_json_response(response, f"{url=}")

@@ -23,7 +23,7 @@ def api(server, api_token): return VariantGridAPI(server, api_token)
 
 @pytest.fixture
 def capabilities_json():
-    """ GET seqauto/api/v1/capabilities from a current (VG4) server """
+    """ GET api/v1/capabilities from a current (VG4) server """
     return {
         "version": "4.0.0",
         "git_hash": "2130cffe0",

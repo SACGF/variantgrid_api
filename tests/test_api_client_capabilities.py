@@ -13,7 +13,7 @@ CVO = "dragen_tso500_combined_variant_output"
 
 @pytest.fixture
 def capabilities_url(server):
-    return f"{server}/seqauto/api/v1/capabilities"
+    return f"{server}/api/v1/capabilities"
 
 
 @pytest.fixture
@@ -62,6 +62,17 @@ def test_capabilities_404_is_legacy(api, capabilities_url):
     assert not api.supports("patients")
     assert not api.accepts_upload("vcf")
     assert len(_capabilities_calls(capabilities_url)) == 1
+
+
+@responses.activate
+def test_capabilities_login_redirect_is_legacy(api, server, capabilities_url):
+    """ An older server whose login middleware doesn't exempt /api/ redirects to its login page """
+    login_url = f"{server}/accounts/login/?next=/api/v1/capabilities"
+    responses.add(responses.GET, capabilities_url, status=302, headers={"Location": login_url})
+    responses.add(responses.GET, login_url, body="<html>login</html>", status=200)
+
+    assert api.capabilities is ServerCapabilities.LEGACY
+    assert len(responses.calls) == 1  # redirect not followed
 
 
 @responses.activate

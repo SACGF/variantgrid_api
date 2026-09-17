@@ -10,7 +10,7 @@ SERVER = "https://vg.example.org"
 STATUS_RE = re.compile(rf"{SERVER}/upload/api/v1/upload_status/sha256/[0-9a-f]+$")
 UPLOAD_URL = f"{SERVER}/upload/api/v1/file_upload"
 DOWNLOAD_RE = re.compile(rf"{SERVER}/upload/api/v1/download/sha256/[0-9a-f]+/(vcf|csv)$")
-CAPABILITIES_URL = f"{SERVER}/seqauto/api/v1/capabilities"
+CAPABILITIES_URL = f"{SERVER}/api/v1/capabilities"
 
 
 def _add_capabilities(features=("upload_status",)):
