@@ -2,6 +2,8 @@
 overrides, and assertion helpers work correctly."""
 import pytest
 
+from variantgrid_api.api_client import UnsupportedFeaturePolicy, UnsupportedFeatureError
+from variantgrid_api.data_models import ServerCapabilities
 from variantgrid_api.mock_variantgrid_api import MockVariantGridAPI
 
 
@@ -222,3 +224,49 @@ def test_mock_upload_file_records_metadata_only_when_sent(mock_api):
     calls = mock_api.get_calls("upload_file")
     assert calls[0] == (("a.vcf",), {"path": "a.vcf"})
     assert calls[1] == (("b.vcf",), {"path": None, "metadata": {"genome_build": "GRCh37"}})
+
+
+# ------------------------------------------------------------------ #
+# Capabilities                                                         #
+# ------------------------------------------------------------------ #
+
+def test_mock_default_capabilities_support_everything_gated(mock_api, vg_objects):
+    assert mock_api.supports("patients")
+    assert mock_api.accepts_upload("dragen_tso500_combined_variant_output")
+    mock_api.create_patient(vg_objects["patient"])
+    mock_api.upload_file("cvo.tsv", path=None, file_type="dragen_tso500_combined_variant_output")
+    mock_api.assert_called_once("create_patient")
+    assert mock_api.get_calls("upload_file") == [
+        (("cvo.tsv",), {"path": None, "file_type": "dragen_tso500_combined_variant_output"})]
+
+
+def test_mock_legacy_skips_under_skip(vg_objects):
+    mock_api = MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY,
+                                  unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    assert not mock_api.supports("patients")
+    assert mock_api.create_patient(vg_objects["patient"]) is None
+    assert mock_api.link_sequencing_sample_extraction(vg_objects["sequencing_sample_lookup_1"], "2600000001C") is None
+    assert mock_api.upload_file("cvo.tsv", path=None, file_type="dragen_tso500_combined_variant_output") is None
+    mock_api.assert_not_called("create_patient")
+    mock_api.assert_not_called("link_sequencing_sample_extraction")
+    mock_api.assert_not_called("upload_file")
+
+    # Metadata is dropped but the file still uploads
+    assert mock_api.upload_file("a.vcf", path=None, metadata={"genome_build": "GRCh37"}) is not None
+    assert mock_api.get_calls("upload_file") == [(("a.vcf",), {"path": None})]
+
+
+def test_mock_legacy_raises_under_error(vg_objects):
+    mock_api = MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY)
+    with pytest.raises(UnsupportedFeatureError):
+        mock_api.create_specimen_measures("2600000001", vg_objects["specimen_measures"])
+    mock_api.assert_not_called("create_specimen_measures")
+
+
+def test_mock_legacy_skips_annotation_flow():
+    mock_api = MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY,
+                                  unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    assert mock_api.poll_upload_status(uploaded_file_id=1) is None
+    assert mock_api.annotate_vcf("input.vcf") is None
+    mock_api.assert_not_called("poll_upload_status")
+    mock_api.assert_not_called("annotate_vcf")

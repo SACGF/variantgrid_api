@@ -14,7 +14,7 @@ import requests
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, JointCalledVCF, \
     SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer, \
     SequencingSampleLookup, Patient, Specimen, Extraction, SpecimenMeasure, ExternalReference, ReferenceLike, \
-    reference_json
+    reference_json, ServerCapabilities
 
 
 _UNSET = object()
@@ -33,6 +33,20 @@ class EmptyInputPolicy(Enum):
     ERROR = "error"
 
 
+class UnsupportedFeaturePolicy(Enum):
+    """ What a gated call does when the server lacks the feature (see VariantGridAPI.capabilities) """
+    SKIP = "skip"     # log a warning, return None
+    ERROR = "error"   # raise UnsupportedFeatureError
+
+
+class UnsupportedFeatureError(Exception):
+    """ Raised (under UnsupportedFeaturePolicy.ERROR) when a call needs a feature the server doesn't have """
+
+    def __init__(self, message, capabilities: Optional[ServerCapabilities] = None):
+        super().__init__(message)
+        self.capabilities = capabilities
+
+
 class AnnotationError(Exception):
     """Raised when the server reports an error while importing/annotating an uploaded file."""
 
@@ -45,7 +59,8 @@ class VariantGridAPI:
     def __init__(self, server, api_token,
                  empty_input_policy=EmptyInputPolicy.ERROR,
                  logger: Optional[logging.Logger] = None,
-                 log_request=False, log_response=False
+                 log_request=False, log_response=False,
+                 unsupported_feature_policy=UnsupportedFeaturePolicy.ERROR
     ):
         self.server = server
         self.headers = {"Authorization": f"Token {api_token}"}
@@ -55,6 +70,8 @@ class VariantGridAPI:
         self.validation_handler = self._get_validation_handler(empty_input_policy, logger)
         self.log_request = log_request
         self.log_response = log_response
+        self.unsupported_feature_policy = unsupported_feature_policy
+        self._capabilities: Optional[ServerCapabilities] = None
 
     def _get_url(self, url):
         return urllib.parse.urljoin(self.server, url)
@@ -121,6 +138,49 @@ class VariantGridAPI:
     def _validate_list(self, info: str, list_obj: List):
         if not list_obj:
             self.validation_handler(f"{info}: empty list")
+
+    ##########################################################
+    ## Server capabilities (SACGF/variantgrid_sapath#443)
+    ## One client talks to servers of different ages. Calls needing a newer server are gated on the
+    ## features it reports, and handled by unsupported_feature_policy when it lacks them
+
+    @property
+    def capabilities(self) -> ServerCapabilities:
+        """ Fetched on first use then cached, so constructing the client and ungated calls do no extra
+            request. A server without the endpoint (404) is ServerCapabilities.LEGACY """
+        if self._capabilities is None:
+            url = self._get_url("seqauto/api/v1/capabilities")
+            response = requests.get(url, headers=self.headers)
+            if response.status_code == 404:
+                self.logger.info("Server has no capabilities endpoint (404) - treating as legacy")
+                self._capabilities = ServerCapabilities.LEGACY
+            else:
+                data = self._handle_json_response(response, f"{url=}")
+                self._capabilities = ServerCapabilities.from_json(data)
+        return self._capabilities
+
+    def supports(self, feature: str) -> bool:
+        return feature in self.capabilities.features
+
+    def accepts_upload(self, file_type: str) -> bool:
+        """ file_type is the server's UploadedFileTypes name in lower case, eg 'dragen_tso500_combined_variant_output' """
+        return file_type in self.capabilities.upload_file_types
+
+    def _unsupported(self, message: str) -> bool:
+        """ Applies unsupported_feature_policy - returns False (caller skips) or raises """
+        capabilities = self.capabilities
+        message = f"{message} (server version '{capabilities.version}')"
+        if self.unsupported_feature_policy == UnsupportedFeaturePolicy.SKIP:
+            self.logger.warning("Skipping: %s", message)
+            return False
+        raise UnsupportedFeatureError(message, capabilities)
+
+    def _require(self, feature: str) -> bool:
+        """ True if the server supports feature, otherwise applies unsupported_feature_policy """
+        return self.supports(feature) or self._unsupported(f"server doesn't support feature '{feature}'")
+
+    def _require_upload(self, file_type: str) -> bool:
+        return self.accepts_upload(file_type) or self._unsupported(f"server doesn't accept upload file type '{file_type}'")
 
     def create_experiment(self, experiment: str):
         self._validate_string("experiment", experiment)
@@ -248,21 +308,29 @@ class VariantGridAPI:
     ## Creates are upserts keyed on the identifiers sent, so re-posting returns the same rows
 
     def create_patient(self, patient: Patient):
+        if not self._require("patients"):
+            return None
         self._validate_object("patient", patient)
         return self._post("patients/api/v1/patient/", patient.to_dict())
 
     def create_specimen(self, specimen: Specimen):
         """ The specimen's patient must already exist on the server, otherwise this is a 400 """
+        if not self._require("patients"):
+            return None
         self._validate_object("specimen", specimen)
         return self._post("patients/api/v1/specimen/", specimen.to_dict())
 
     def create_extraction(self, extraction: Extraction):
         """ The extraction's specimen must already exist on the server, otherwise this is a 400 """
+        if not self._require("patients"):
+            return None
         self._validate_object("extraction", extraction)
         return self._post("patients/api/v1/extraction/", extraction.to_dict())
 
     def create_specimen_measure(self, specimen_reference: ReferenceLike, measure: SpecimenMeasure):
         """ An unknown specimen is a 400. Replaces any existing measure of the same type for the specimen """
+        if not self._require("specimen_measures"):
+            return None
         self._validate_reference("specimen_reference", specimen_reference)
         self._validate_object("measure", measure)
         json_data = {"specimen": reference_json(specimen_reference), **measure.to_dict()}
@@ -270,6 +338,8 @@ class VariantGridAPI:
 
     def create_specimen_measures(self, specimen_reference: ReferenceLike, measures: List[SpecimenMeasure]):
         """ A run's measures (TMB, MSI, GIS etc) against one specimen in one call """
+        if not self._require("specimen_measures"):
+            return None
         self._validate_reference("specimen_reference", specimen_reference)
         self._validate_list("measures", measures)
         json_data = {
@@ -279,7 +349,7 @@ class VariantGridAPI:
         return self._post("patients/api/v1/specimen_measure/bulk_create", json_data)
 
     def link_sequencing_sample_extraction(self, sequencing_sample_lookup: SequencingSampleLookup,
-                                          extraction_reference: ReferenceLike) -> dict:
+                                          extraction_reference: ReferenceLike) -> Optional[dict]:
         """ Name the extraction a sequencing sample was made from. One call per sequencing sample is
             enough - the server carries it to every Sample made from that sample's VCFs, and on to the
             new rows if the sample sheet is re-sent.
@@ -288,6 +358,8 @@ class VariantGridAPI:
             sequencing sample is a 400, but an extraction the server doesn't have yet is not an error:
             the response is a 202 with match_status 'Pending', and the link attaches itself once the
             extraction is created - there's no need to re-send. """
+        if not self._require("link_extraction"):
+            return None
         self._validate_object("sequencing_sample_lookup", sequencing_sample_lookup)
         self._validate_reference("extraction_reference", extraction_reference)
         json_data = {
@@ -296,7 +368,8 @@ class VariantGridAPI:
         }
         return self._post("seqauto/api/v1/sequencing_sample/link_extraction", json_data)
 
-    def upload_file(self, filename: str, path=_UNSET, metadata: Optional[dict] = None):
+    def upload_file(self, filename: str, path=_UNSET, metadata: Optional[dict] = None,
+                    file_type: Optional[str] = None):
         """ Upload a file via multipart POST to upload/api/v1/file_upload.
 
             Returns {"uploaded_file_id": <id>, "sha256_hash": <hash>, ...}; identify the upload by
@@ -315,7 +388,17 @@ class VariantGridAPI:
                   'sample_extractions' - {vcf_sample_name: reference} for a multi-sample VCF
                   Send 'extraction' or 'sample_extractions', not both. An unknown key is a 400. An extraction
                   the server doesn't have yet is not - it attaches once the extraction is created.
-                  Needs a server at or after SACGF/variantgrid#1716 """
+                  Needs the server feature 'upload_metadata'. Without it, SKIP uploads the file without the
+                  metadata (as older clients did) rather than not at all, and ERROR raises
+
+            file_type: the server's name for what this file is, eg 'dragen_tso500_combined_variant_output'.
+                  Not sent (the server decides from the filename) - if given, the upload only happens when
+                  accepts_upload(file_type), so an older server doesn't mis-import it as something else """
+        if metadata and not self.supports("upload_metadata"):
+            self._unsupported(f"upload metadata for '{filename}' (server doesn't support feature 'upload_metadata')")
+            metadata = None
+        if file_type and not self._require_upload(file_type):
+            return None
         url = self._get_url("upload/api/v1/file_upload")
         if path is _UNSET:
             path = filename
@@ -383,17 +466,19 @@ class VariantGridAPI:
             return f"sha256/{sha256}"
         raise ValueError("Must provide one of 'uploaded_file_id' or 'sha256'")
 
-    def poll_upload_status(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None) -> dict:
+    def poll_upload_status(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None) -> Optional[dict]:
         """ Single GET of an uploaded file's import/annotation status.
 
             Keyed by uploaded_file_id (returned from upload_file) or the SHA-256 of the uploaded file.
-            See wait_for_annotation to block until annotation is complete. """
+            See wait_for_annotation to block until annotation is complete. Needs server feature 'upload_status' """
+        if not self._require("upload_status"):
+            return None
         segment = self._upload_key_segment(uploaded_file_id, sha256)
         return self._get(f"upload/api/v1/upload_status/{segment}")
 
     def wait_for_annotation(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None,
                             timeout: float = 3600, poll_interval: float = 10, sleep: Callable = time.sleep,
-                            max_transient_errors: int = 5) -> dict:
+                            max_transient_errors: int = 5) -> Optional[dict]:
         """ Poll poll_upload_status until 'annotation_complete' is true, then return the final status dict.
 
             Raises AnnotationError if the server reports an 'error', or TimeoutError if 'timeout' seconds elapse.
@@ -402,7 +487,9 @@ class VariantGridAPI:
             Transient server hiccups (5xx / connection / timeout - e.g. a brief 500 right after upload while the
             server is still creating the upload record) are tolerated: up to 'max_transient_errors' *consecutive*
             failures are retried before giving up. A 4xx response is treated as a real error and raised immediately.
-            The success counter resets whenever a poll succeeds. """
+            The success counter resets whenever a poll succeeds. Needs server feature 'upload_status' """
+        if not self._require("upload_status"):
+            return None
         deadline = time.monotonic() + timeout
         transient_errors = 0
         while True:
@@ -441,7 +528,7 @@ class VariantGridAPI:
     def download_annotated(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None,
                            export_type: str = "vcf", dest_path: Optional[Union[str, Path]] = None,
                            timeout: float = 3600, poll_interval: float = 10,
-                           sleep: Callable = time.sleep) -> Path:
+                           sleep: Callable = time.sleep) -> Optional[Path]:
         """ Download the cohort-level annotated export of an uploaded VCF, saving it to disk.
 
             export_type is 'vcf' (gzipped *.vcf.gz) or 'csv' (zipped *.csv.zip). The export covers all samples
@@ -452,7 +539,9 @@ class VariantGridAPI:
             in the current directory; if it is an existing directory the attachment filename is placed inside it;
             otherwise it is treated as the full destination path. Returns the Path written.
 
-            Raises TimeoutError if the file isn't ready within 'timeout' seconds. """
+            Raises TimeoutError if the file isn't ready within 'timeout' seconds. Needs server feature 'upload_status' """
+        if not self._require("upload_status"):
+            return None
         if export_type not in ("vcf", "csv"):
             raise ValueError(f"export_type must be 'vcf' or 'csv', got {export_type!r}")
         segment = self._upload_key_segment(uploaded_file_id, sha256)
@@ -494,10 +583,13 @@ class VariantGridAPI:
             return None
 
     def annotate_vcf(self, filename: str, export_type: str = "vcf", dest_path: Optional[Union[str, Path]] = None,
-                     timeout: float = 3600, poll_interval: float = 10, sleep: Callable = time.sleep) -> Path:
+                     timeout: float = 3600, poll_interval: float = 10, sleep: Callable = time.sleep) -> Optional[Path]:
         """ Convenience one-liner: upload a VCF, wait for annotation to finish, download the annotated export.
 
-            Chains upload_file -> wait_for_annotation -> download_annotated and returns the Path written. """
+            Chains upload_file -> wait_for_annotation -> download_annotated and returns the Path written.
+            Needs server feature 'upload_status' - checked before uploading """
+        if not self._require("upload_status"):
+            return None
         # path is SeqAuto-only and makes ad-hoc uploads fail the import - omit it for the annotate flow
         upload = self.upload_file(filename, path=None)
         uploaded_file_id = upload["uploaded_file_id"]

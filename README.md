@@ -64,6 +64,34 @@ api.upload_file("sample.vcf.gz", path=None,
 A bare string names a record by its local reference. Use `ExternalReference(code=..., external_type=...)` to
 name it by a LIMS identifier instead. See `examples/example_tso500.py` for a full run.
 
+## Talking to more than one VariantGrid version
+
+Servers of different ages accept different calls. The client asks the server which features it has
+(`GET seqauto/api/v1/capabilities`, fetched once on first use), and each call that needs a newer server
+checks that list first: the patient / specimen / extraction calls, specimen measures,
+`link_sequencing_sample_extraction`, the annotate flow (`poll_upload_status`, `wait_for_annotation`,
+`download_annotated`, `annotate_vcf`), and `upload_file` with `metadata` or `file_type`. A server without the
+capabilities endpoint counts as legacy and reports no features.
+
+By default an unsupported call raises `UnsupportedFeatureError`. To run the same code against old and new
+servers, skip those calls instead: they log a warning and return `None`. `upload_file` is the exception: on a
+server without upload metadata it drops the `metadata` and still uploads the file.
+
+```
+from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
+
+api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+api.create_patient(patient)        # skipped on a server without patients
+
+# Uploads only when the server has an importer for this file type
+api.upload_file("sample_CombinedVariantOutput.tsv", path=None,
+                file_type="dragen_tso500_combined_variant_output")
+```
+
+Where the fallback isn't simply "do nothing", branch on `api.supports("feature")` or
+`api.accepts_upload("file_type")`. `api.capabilities.version` is useful for logging which server you reached.
+For tests, `MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY)` behaves like an old server.
+
 ## Testing
 
 ```

@@ -9,7 +9,7 @@ from variantgrid_api.data_models import (
     JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile,
     SequencingFile, SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer,
     Patient, Specimen, Extraction, SpecimenMeasure, ExternalPK, ExternalReference, Sex, TissueStatus, NucleicAcid,
-    SpecimenMeasureType
+    SpecimenMeasureType, ServerCapabilities
 )
 
 @pytest.fixture
@@ -20,6 +20,26 @@ def api_token(): return "TKN"
 
 @pytest.fixture
 def api(server, api_token): return VariantGridAPI(server, api_token)
+
+@pytest.fixture
+def capabilities_json():
+    """ GET seqauto/api/v1/capabilities from a current (VG4) server """
+    return {
+        "version": "4.0.0",
+        "git_hash": "2130cffe0",
+        "features": ["patients", "specimen_measures", "link_extraction", "upload_status",
+                     "joint_called_vcf_cross_run", "upload_metadata"],
+        "upload_file_types": ["vcf", "gene_coverage", "dragen_tso500_all_fusions",
+                              "dragen_tso500_combined_variant_output", "gene_level_cnv_vcf"],
+    }
+
+@pytest.fixture
+def vg4_api(server, api_token, capabilities_json):
+    """ Client with capabilities already known, so gated calls make no probe request - for tests about
+        payloads (the probe itself is tested in test_api_client_capabilities.py) """
+    api = VariantGridAPI(server, api_token)
+    api._capabilities = ServerCapabilities.from_json(capabilities_json)
+    return api
 
 @pytest.fixture
 def data_dir(): return Path(__file__).parent / "test_data"

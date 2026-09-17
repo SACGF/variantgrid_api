@@ -4,20 +4,22 @@
     1. Accession the patient, the specimen, and its two extractions (DNA '2600000001C', RNA '2600000001B')
     2. Post the sequencing run and sample sheet as usual
     3. Link each arm's sequencing sample to its extraction - one call per arm
-    4. Upload the DNA arm's VCFs and the RNA arm's files, naming the extraction and build in upload metadata
+    4. Upload the DNA arm's VCFs and the RNA arm's files, naming the extraction and build in upload metadata.
+       The CombinedVariantOutput.tsv goes up if the server accepts it, otherwise the RNA arm's splice VCF
     5. Post the specimen's TMB / MSI / GIS, transcribed from CombinedVariantOutput.tsv
 
     Ordering is forgiving: a link or upload naming an extraction the server doesn't have yet is parked and
     attaches itself once the extraction is created, so nothing needs re-sending.
 
-    Needs a server at or after SACGF/variantgrid#1716. Test data is synthetic - see tests/test_data/tso500/README.md
+    Runs against any server: calls it doesn't support are skipped (UnsupportedFeaturePolicy.SKIP). The full
+    run needs a server at or after SACGF/variantgrid#1716 with the capabilities endpoint. Test data is synthetic - see tests/test_data/tso500/README.md
 """
 import argparse
 import os
 from datetime import datetime
 from typing import Dict
 
-from variantgrid_api.api_client import VariantGridAPI
+from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
 from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, \
     SampleSheet, SampleSheetLookup, SequencingSampleLookup, Patient, Specimen, Extraction, \
     SpecimenMeasure, ExternalReference, TissueStatus, NucleicAcid, SpecimenMeasureType
@@ -137,8 +139,6 @@ def test_api(server, api_token, step=None):
         # No contigs in the header, so the build must be declared
         "exon_cnv": (f"{dna_prefix}_DragenExonCNV.vcf",
                      {"extraction": dna_reference, "genome_build": "GRCh37"}),
-        "splice_variants": (f"{rna_prefix}_SpliceVariants.vcf",
-                            {"extraction": rna_reference}),
         # Carries no build at all
         "fusions": (f"{rna_prefix}_AllFusions.csv",
                     {"extraction": rna_reference, "genome_build": "GRCh37"}),
@@ -150,7 +150,18 @@ def test_api(server, api_token, step=None):
     #########################
     # Call API
 
-    vg_api = VariantGridAPI(server, api_token)
+    # SKIP: calls an older server doesn't support are logged and skipped, so this runs against VG3 and VG4
+    vg_api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    cvo_file_type = "dragen_tso500_combined_variant_output"
+    accepts_cvo = vg_api.accepts_upload(cvo_file_type)
+    print(f"Server version: {vg_api.capabilities.version}, {accepts_cvo=}")
+
+    # The one real branch: a server that imports the CVO takes the splice calls from it (sending the
+    # splice VCF as well would double them), an older one needs the splice VCF
+    if accepts_cvo:
+        uploads["combined_variant_output"] = (cvo_filename, {"genome_build": "GRCh37"})
+    else:
+        uploads["splice_variants"] = (f"{rna_prefix}_SpliceVariants.vcf", {"extraction": rna_reference})
 
     API_STEPS = {
         # 1. Accessioning - a specimen needs its patient, an extraction its specimen
@@ -170,7 +181,9 @@ def test_api(server, api_token, step=None):
     }
     # 4. Uploads. path=None as these aren't registered SeqAuto VCFs - the metadata names the extraction instead
     for name, (filename, metadata) in uploads.items():
-        API_STEPS[f"upload_{name}"] = lambda f=filename, m=metadata: vg_api.upload_file(f, path=None, metadata=m)
+        file_type = cvo_file_type if name == "combined_variant_output" else None
+        API_STEPS[f"upload_{name}"] = lambda f=filename, m=metadata, t=file_type: vg_api.upload_file(
+            f, path=None, metadata=m, file_type=t)
     # 5. Measures describe the specimen; the DNA arm produced them
     API_STEPS["specimen_measures"] = lambda: vg_api.create_specimen_measures(specimen_reference, specimen_measures)
 

@@ -9,6 +9,15 @@
   - `upload_file()` takes an optional `metadata` dict, sent as extra query params: `genome_build` (a build's own name such as `GRCh37`, not an alias), `source`, `extraction`, or `sample_extractions` (`{vcf_sample_name: reference}`). References and objects are JSON-encoded. `path` and `force` are reserved and raise `ValueError`.
   - `MockVariantGridAPI` mirrors the new methods and the `metadata` kwarg.
   - `tests/test_data/tso500/` holds the synthetic TSO 500 data set from SACGF/variantgrid.
+- [Server capabilities probe and feature-gated calls](https://github.com/SACGF/variantgrid_api/issues/21) - one client can talk to both VG3 and VG4 servers (SACGF/variantgrid_sapath#443). Requires the `seqauto/api/v1/capabilities` endpoint in SACGF/variantgrid; a server without it counts as legacy.
+  - `VariantGridAPI.capabilities` is fetched on first use and then cached, and returns a `ServerCapabilities` (`version`, `git_hash`, `features`, `upload_file_types`). A 404 gives `ServerCapabilities.LEGACY`. Building the client and calling ungated methods make no extra request.
+  - `supports(feature)` and `accepts_upload(file_type)` let callers branch where skipping isn't enough, such as uploading the CombinedVariantOutput or the splice VCF.
+  - New constructor arg `unsupported_feature_policy`: `UnsupportedFeaturePolicy.ERROR` (default) raises `UnsupportedFeatureError`, and `SKIP` logs a warning and returns `None`.
+  - Gated calls: `create_patient` / `create_specimen` / `create_extraction` (`patients`), `create_specimen_measure(s)` (`specimen_measures`), `link_sequencing_sample_extraction` (`link_extraction`), and `upload_file` with non-empty `metadata` (`upload_metadata`). For `upload_file`, SKIP drops the metadata but still uploads the file, as older clients did.
+  - The upload/annotate flow is now gated on `upload_status`: `poll_upload_status`, `wait_for_annotation`, `download_annotated` and `annotate_vcf` (checked before it uploads). A server without the capabilities endpoint counts as legacy, so these raise `UnsupportedFeatureError` against it even when it has the upload status endpoints. `vg_api annotate_vcf` reports that as an error (exit 1).
+  - `upload_file()` takes an optional `file_type` (such as `dragen_tso500_combined_variant_output`). It is not sent to the server; the upload only happens when `accepts_upload(file_type)` is true.
+  - `MockVariantGridAPI` takes `capabilities` (default: every gated feature and file type) and `unsupported_feature_policy`. A call skipped under SKIP is not recorded.
+  - `examples/example_tso500.py` uses SKIP, and uploads the CombinedVariantOutput when the server accepts it, otherwise the splice VCF.
 
 ### Changed
 

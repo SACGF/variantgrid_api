@@ -10,6 +10,11 @@ from variantgrid_api.data_models import ExternalReference, ExternalPK, Extractio
     SpecimenMeasureType
 
 
+@pytest.fixture
+def api(vg4_api):
+    return vg4_api
+
+
 def _last_json():
     return json.loads(responses.calls[-1].request.body)
 

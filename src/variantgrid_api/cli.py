@@ -13,7 +13,7 @@ import sys
 
 import requests
 
-from variantgrid_api.api_client import VariantGridAPI, AnnotationError
+from variantgrid_api.api_client import VariantGridAPI, AnnotationError, UnsupportedFeatureError
 
 DEFAULT_SERVER = "https://variantgrid.com"
 
@@ -146,6 +146,9 @@ def main(argv=None):
         return EXIT_ERROR
     except requests.HTTPError as e:
         print(f"HTTP error: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    except UnsupportedFeatureError as e:
+        print(f"This VariantGrid server can't annotate uploaded VCFs via the API: {e}", file=sys.stderr)
         return EXIT_ERROR
 
 

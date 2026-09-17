@@ -3,7 +3,7 @@ import warnings
 from datetime import date, datetime
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List, Union
+from typing import Optional, List, Union, FrozenSet, ClassVar
 
 from dataclasses_json import dataclass_json, config
 
@@ -440,3 +440,26 @@ class SpecimenMeasure:
     source_payload: Optional[dict] = field(default=None, metadata=_exclude_none())
     measured_date: Optional[datetime] = field(default=None, metadata=_exclude_none())
     extraction: Optional[ReferenceLike] = _reference_field(default=None)  # the arm that produced it
+
+
+@dataclass(frozen=True)
+class ServerCapabilities:
+    """ What a server accepts, from GET seqauto/api/v1/capabilities (SACGF/variantgrid_sapath#443).
+
+        A server without that endpoint (404) is LEGACY: version 'legacy', no features, no upload file types """
+    LEGACY: ClassVar["ServerCapabilities"]
+
+    version: str
+    git_hash: Optional[str] = None
+    features: FrozenSet[str] = frozenset()
+    upload_file_types: FrozenSet[str] = frozenset()
+
+    @staticmethod
+    def from_json(data: dict) -> "ServerCapabilities":
+        return ServerCapabilities(version=data["version"],
+                                  git_hash=data.get("git_hash"),
+                                  features=frozenset(data.get("features") or []),
+                                  upload_file_types=frozenset(data.get("upload_file_types") or []))
+
+
+ServerCapabilities.LEGACY = ServerCapabilities(version="legacy")

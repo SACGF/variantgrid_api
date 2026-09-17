@@ -13,22 +13,42 @@ Usage::
 from __future__ import annotations
 
 import copy
+import logging
 import warnings
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-from variantgrid_api.data_models import reference_json
+from variantgrid_api.api_client import UnsupportedFeaturePolicy, UnsupportedFeatureError
+from variantgrid_api.data_models import reference_json, ServerCapabilities
 
 _UNSET = object()
 
+# Every feature and upload file type the real client gates on - the shape of a current (VG4) server
+MOCK_CAPABILITIES = ServerCapabilities(
+    version="mock",
+    features=frozenset({"patients", "specimen_measures", "link_extraction", "upload_status",
+                        "joint_called_vcf_cross_run", "upload_metadata"}),
+    upload_file_types=frozenset({"vcf", "gene_coverage", "dragen_tso500_all_fusions",
+                                 "dragen_tso500_combined_variant_output", "gene_level_cnv_vcf"}),
+)
+
 
 class MockVariantGridAPI:
-    """Drop-in replacement for VariantGridAPI that records all calls."""
+    """Drop-in replacement for VariantGridAPI that records all calls.
 
-    def __init__(self):
+    capabilities defaults to MOCK_CAPABILITIES (a current server). Pass ServerCapabilities.LEGACY for an
+    older server: gated calls then follow unsupported_feature_policy exactly as the real client does, and
+    a skipped call is not recorded."""
+
+    def __init__(self, capabilities: Optional[ServerCapabilities] = None,
+                 unsupported_feature_policy=UnsupportedFeaturePolicy.ERROR,
+                 logger: Optional[logging.Logger] = None):
         # List of (method_name, args, kwargs) in call order
         self.calls: List[Tuple[str, tuple, dict]] = []
         self._return_values: dict = {}
+        self.capabilities = capabilities if capabilities is not None else MOCK_CAPABILITIES
+        self.unsupported_feature_policy = unsupported_feature_policy
+        self.logger = logger or logging.getLogger(__name__)
 
     # ------------------------------------------------------------------ #
     # Introspection helpers                                               #
@@ -61,6 +81,29 @@ class MockVariantGridAPI:
 
     def reset(self) -> None:
         self.calls.clear()
+
+    # ------------------------------------------------------------------ #
+    # Capabilities — same gating as VariantGridAPI                        #
+    # ------------------------------------------------------------------ #
+
+    def supports(self, feature: str) -> bool:
+        return feature in self.capabilities.features
+
+    def accepts_upload(self, file_type: str) -> bool:
+        return file_type in self.capabilities.upload_file_types
+
+    def _unsupported(self, message: str) -> bool:
+        message = f"{message} (server version '{self.capabilities.version}')"
+        if self.unsupported_feature_policy == UnsupportedFeaturePolicy.SKIP:
+            self.logger.warning("Skipping: %s", message)
+            return False
+        raise UnsupportedFeatureError(message, self.capabilities)
+
+    def _require(self, feature: str) -> bool:
+        return self.supports(feature) or self._unsupported(f"server doesn't support feature '{feature}'")
+
+    def _require_upload(self, file_type: str) -> bool:
+        return self.accepts_upload(file_type) or self._unsupported(f"server doesn't accept upload file type '{file_type}'")
 
     # ------------------------------------------------------------------ #
     # API surface — mirrors VariantGridAPI public methods exactly         #
@@ -138,28 +181,40 @@ class MockVariantGridAPI:
         return self._ret("create_multiple_qc_gene_coverage", {"created": len(qc_gene_coverage_list)})
 
     def create_patient(self, patient):
+        if not self._require("patients"):
+            return None
         self._record("create_patient", patient)
         return self._ret("create_patient", {"id": 1, **patient.to_dict()})
 
     def create_specimen(self, specimen):
+        if not self._require("patients"):
+            return None
         self._record("create_specimen", specimen)
         return self._ret("create_specimen", {"id": 1, **specimen.to_dict()})
 
     def create_extraction(self, extraction):
+        if not self._require("patients"):
+            return None
         self._record("create_extraction", extraction)
         return self._ret("create_extraction", {"id": 1, **extraction.to_dict()})
 
     def create_specimen_measure(self, specimen_reference, measure):
+        if not self._require("specimen_measures"):
+            return None
         self._record("create_specimen_measure", specimen_reference, measure)
         return self._ret("create_specimen_measure", {"id": 1, "specimen": reference_json(specimen_reference),
                                                      **measure.to_dict()})
 
     def create_specimen_measures(self, specimen_reference, measures):
+        if not self._require("specimen_measures"):
+            return None
         self._record("create_specimen_measures", specimen_reference, measures)
         return self._ret("create_specimen_measures", {"specimen": reference_json(specimen_reference),
                                                       "measures": [m.to_dict() for m in measures]})
 
     def link_sequencing_sample_extraction(self, sequencing_sample_lookup, extraction_reference):
+        if not self._require("link_extraction"):
+            return None
         self._record("link_sequencing_sample_extraction", sequencing_sample_lookup, extraction_reference)
         return self._ret("link_sequencing_sample_extraction", {
             "sequencing_sample": sequencing_sample_lookup.sample_name,
@@ -168,16 +223,25 @@ class MockVariantGridAPI:
             "extraction": str(reference_json(extraction_reference)),
         })
 
-    def upload_file(self, filename, path=_UNSET, metadata=None):
+    def upload_file(self, filename, path=_UNSET, metadata=None, file_type=None):
+        if metadata and not self.supports("upload_metadata"):
+            self._unsupported(f"upload metadata for '{filename}' (server doesn't support feature 'upload_metadata')")
+            metadata = None
+        if file_type and not self._require_upload(file_type):
+            return None
         if path is _UNSET:
             path = filename
-        # metadata only recorded when sent, so existing assertions on the recorded kwargs still hold
+        # metadata / file_type only recorded when sent, so existing assertions on the recorded kwargs still hold
         extra = {"metadata": metadata} if metadata is not None else {}
+        if file_type is not None:
+            extra["file_type"] = file_type
         self._record("upload_file", filename, path=path, **extra)
         return self._ret("upload_file", {"uploaded_file_id": 1, "sha256_hash": "deadbeef",
                                          "path": path, "status": "ok"})
 
     def poll_upload_status(self, uploaded_file_id=None, sha256=None):
+        if not self._require("upload_status"):
+            return None
         self._record("poll_upload_status", uploaded_file_id, sha256)
         return self._ret("poll_upload_status", {
             "uploaded_file_id": uploaded_file_id,
@@ -188,6 +252,8 @@ class MockVariantGridAPI:
 
     def wait_for_annotation(self, uploaded_file_id=None, sha256=None,
                             timeout=3600, poll_interval=10, sleep=None, max_transient_errors=5):
+        if not self._require("upload_status"):
+            return None
         self._record("wait_for_annotation", uploaded_file_id, sha256,
                      timeout=timeout, poll_interval=poll_interval, sleep=sleep,
                      max_transient_errors=max_transient_errors)
@@ -199,6 +265,8 @@ class MockVariantGridAPI:
 
     def download_annotated(self, uploaded_file_id=None, sha256=None, export_type="vcf",
                            dest_path=None, timeout=3600, poll_interval=10, sleep=None):
+        if not self._require("upload_status"):
+            return None
         self._record("download_annotated", uploaded_file_id, sha256, export_type=export_type,
                      dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep)
         default = Path(dest_path) if dest_path is not None else Path(f"download.{export_type}")
@@ -206,6 +274,8 @@ class MockVariantGridAPI:
 
     def annotate_vcf(self, filename, export_type="vcf", dest_path=None,
                      timeout=3600, poll_interval=10, sleep=None):
+        if not self._require("upload_status"):
+            return None
         self._record("annotate_vcf", filename, export_type=export_type, dest_path=dest_path,
                      timeout=timeout, poll_interval=poll_interval, sleep=sleep)
         default = Path(dest_path) if dest_path is not None else Path(f"download.{export_type}")

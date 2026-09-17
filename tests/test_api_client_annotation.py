@@ -6,6 +6,11 @@ import responses
 from variantgrid_api.api_client import AnnotationError, VariantGridAPI
 
 
+@pytest.fixture
+def api(vg4_api):
+    return vg4_api
+
+
 def _no_sleep(_seconds):
     """Injectable sleep that never actually waits."""
     return None
