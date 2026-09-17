@@ -17,6 +17,8 @@ import warnings
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
+from variantgrid_api.data_models import reference_json
+
 _UNSET = object()
 
 
@@ -135,10 +137,43 @@ class MockVariantGridAPI:
         self._record("create_multiple_qc_gene_coverage", qc_gene_coverage_list)
         return self._ret("create_multiple_qc_gene_coverage", {"created": len(qc_gene_coverage_list)})
 
-    def upload_file(self, filename, path=_UNSET):
+    def create_patient(self, patient):
+        self._record("create_patient", patient)
+        return self._ret("create_patient", {"id": 1, **patient.to_dict()})
+
+    def create_specimen(self, specimen):
+        self._record("create_specimen", specimen)
+        return self._ret("create_specimen", {"id": 1, **specimen.to_dict()})
+
+    def create_extraction(self, extraction):
+        self._record("create_extraction", extraction)
+        return self._ret("create_extraction", {"id": 1, **extraction.to_dict()})
+
+    def create_specimen_measure(self, specimen_reference, measure):
+        self._record("create_specimen_measure", specimen_reference, measure)
+        return self._ret("create_specimen_measure", {"id": 1, "specimen": reference_json(specimen_reference),
+                                                     **measure.to_dict()})
+
+    def create_specimen_measures(self, specimen_reference, measures):
+        self._record("create_specimen_measures", specimen_reference, measures)
+        return self._ret("create_specimen_measures", {"specimen": reference_json(specimen_reference),
+                                                      "measures": [m.to_dict() for m in measures]})
+
+    def link_sequencing_sample_extraction(self, sequencing_sample_lookup, extraction_reference):
+        self._record("link_sequencing_sample_extraction", sequencing_sample_lookup, extraction_reference)
+        return self._ret("link_sequencing_sample_extraction", {
+            "sequencing_sample": sequencing_sample_lookup.sample_name,
+            "match_status": "Matched",
+            "match_error": None,
+            "extraction": str(reference_json(extraction_reference)),
+        })
+
+    def upload_file(self, filename, path=_UNSET, metadata=None):
         if path is _UNSET:
             path = filename
-        self._record("upload_file", filename, path=path)
+        # metadata only recorded when sent, so existing assertions on the recorded kwargs still hold
+        extra = {"metadata": metadata} if metadata is not None else {}
+        self._record("upload_file", filename, path=path, **extra)
         return self._ret("upload_file", {"uploaded_file_id": 1, "sha256_hash": "deadbeef",
                                          "path": path, "status": "ok"})
 

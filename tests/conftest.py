@@ -7,7 +7,9 @@ from variantgrid_api.api_client import VariantGridAPI
 from variantgrid_api.data_models import (
     EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, SampleSheet,
     JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile,
-    SequencingFile, SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer
+    SequencingFile, SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer,
+    Patient, Specimen, Extraction, SpecimenMeasure, ExternalPK, ExternalReference, Sex, TissueStatus, NucleicAcid,
+    SpecimenMeasureType
 )
 
 @pytest.fixture
@@ -158,6 +160,28 @@ def vg_objects(data_dir):
                        path=seq_run_path("4_QC/bam_stats/samples/fake_sample_2.per_gene_coverage.tsv.gz")),
     ]
 
+    # Accessioning: one specimen with a DNA and an RNA extraction (TSO 500 shape). The patient is known to
+    # the LIMS by an ExternalPK, the specimen and extractions by their lab accessions
+    patient = Patient(patient_code="C0000001", sex=Sex.FEMALE, affected=True,
+                      date_of_birth=datetime(1970, 1, 1).date(),
+                      external_pk=ExternalPK(code="H12345", external_type="HelixID", external_manager="HELIX"))
+    specimen = Specimen(patient=ExternalReference.from_patient(patient), reference_id="2600000001",
+                        tissue_status=TissueStatus.AFFECTED,
+                        collection_date=datetime.fromisoformat("2026-01-01T09:00:00+10:30"))
+    dna_extraction = Extraction(specimen="2600000001", reference_id="2600000001C",
+                                nucleic_acid_source=NucleicAcid.DNA)
+    rna_extraction = Extraction(specimen="2600000001", reference_id="2600000001B",
+                                nucleic_acid_source=NucleicAcid.RNA)
+    specimen_measures = [
+        SpecimenMeasure(measure_type=SpecimenMeasureType.TMB, value=7.1, unit="mut/Mb",
+                        method="DRAGEN TSO500 2.1.1", extraction="2600000001C",
+                        source_payload={"Total TMB": "7.1", "Coding Region Size in Megabases": "1.27"}),
+        SpecimenMeasure(measure_type=SpecimenMeasureType.MSI, value=2.48, unit="%", call="Stable",
+                        threshold=">= 20.00%", threshold_source="Illumina"),
+    ]
+    sequencing_sample_lookup_1 = SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup,
+                                                        sample_name="fake_sample_1")
+
     return dict(
         SEQUENCING_RUN_NAME=SEQUENCING_RUN_NAME,
         seq_run_dir=str(seq_run_dir),
@@ -177,4 +201,10 @@ def vg_objects(data_dir):
         combo_vcf_filename=combo_vcf_filename,
         single_sample_vcf_filename_1=single_sample_vcf_filename_1,
         single_sample_vcf_filename_2=single_sample_vcf_filename_2,
+        patient=patient,
+        specimen=specimen,
+        dna_extraction=dna_extraction,
+        rna_extraction=rna_extraction,
+        specimen_measures=specimen_measures,
+        sequencing_sample_lookup_1=sequencing_sample_lookup_1,
     )

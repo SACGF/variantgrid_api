@@ -3,10 +3,17 @@
 ### Added
 
 - [Accept sequencing data without FastQs (BAM-first runs)](https://github.com/SACGF/variantgrid_api/issues/18) - `SequencingFile.fastq_r1` / `fastq_r2` are now optional, for sequencers that emit BAM directly or runs where FastQs aren't kept. `create_sequencing_data()` only sends an `unaligned_reads` block when `fastq_r1` is set; otherwise the record is just `bam_file` + `vcf_file` and the server resolves the sample from `sample_name`. Requires the matching server support in SACGF/variantgrid (see SACGF/variantgrid_sapath#357). See `examples/example_bam_first_run.py`.
+- [Patient / specimen / extraction, naming a VCF's extraction, and specimen measures](https://github.com/SACGF/variantgrid_api/issues/20) - client support for TSO 500 phase 4. Requires a server at or after SACGF/variantgrid#1716 (SACGF/variantgrid#1707, #1559). See `examples/example_tso500.py`.
+  - New dataclasses `Patient`, `Specimen`, `Extraction`, `SpecimenMeasure`, `ExternalPK` and `ExternalReference`, plus enums `Sex`, `TissueStatus`, `NucleicAcid` and `SpecimenMeasureType` holding the values the server stores. Anywhere a parent or extraction is named, pass an `ExternalReference` (local `reference_id` and/or `code` + `external_type` + optional `external_manager`) or a bare string meaning the local reference. `ExternalReference.from_patient()` / `from_specimen()` / `from_extraction()` build one from an object.
+  - New client methods `create_patient()`, `create_specimen()`, `create_extraction()`, `create_specimen_measure()`, `create_specimen_measures()` (bulk, one specimen) and `link_sequencing_sample_extraction()`. The creates are upserts, so re-posting a run returns the same rows. The link call returns the server's `match_status` / `match_error`. An extraction the server doesn't have yet comes back as a 202 with `match_status` `Pending` rather than raising, and the link attaches itself once the extraction is created.
+  - `upload_file()` takes an optional `metadata` dict, sent as extra query params: `genome_build` (a build's own name such as `GRCh37`, not an alias), `source`, `extraction`, or `sample_extractions` (`{vcf_sample_name: reference}`). References and objects are JSON-encoded. `path` and `force` are reserved and raise `ValueError`.
+  - `MockVariantGridAPI` mirrors the new methods and the `metadata` kwarg.
+  - `tests/test_data/tso500/` holds the synthetic TSO 500 data set from SACGF/variantgrid.
 
 ### Changed
 
 - `SequencingFile` field order is now `sample_name, bam_file, vcf_file, fastq_r1, fastq_r2` (optional fields must come last). Keyword construction is unaffected; positional construction needs updating.
+- `upload_file()` without `metadata` sends exactly what it did before.
 - `create_sequencing_data()` sends a single-end `unaligned_reads` (no `fastq_r2`) when only `fastq_r1` is set, and raises `ValueError` if `fastq_r2` is set without `fastq_r1`. Records carrying both FastQs send exactly the payload they did before.
 
 ## [1.4.0] - 2026-08-07

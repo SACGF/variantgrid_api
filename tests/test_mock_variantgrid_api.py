@@ -182,3 +182,43 @@ def test_reset_preserves_return_overrides(mock_api, vg_objects):
     mock_api.reset()
     result = mock_api.create_experiment(vg_objects["experiment"])
     assert result == {"id": 7}
+
+
+# ------------------------------------------------------------------ #
+# Patient / specimen / extraction, measures, links                     #
+# ------------------------------------------------------------------ #
+
+def test_mock_create_patient_specimen_extraction(mock_api, vg_objects):
+    assert mock_api.create_patient(vg_objects["patient"])["patient_code"] == "C0000001"
+    assert mock_api.create_specimen(vg_objects["specimen"])["reference_id"] == "2600000001"
+    assert mock_api.create_extraction(vg_objects["dna_extraction"])["reference_id"] == "2600000001C"
+    for method in ("create_patient", "create_specimen", "create_extraction"):
+        mock_api.assert_called_once(method)
+
+
+def test_mock_create_specimen_measure_records_args(mock_api, vg_objects):
+    measure = vg_objects["specimen_measures"][0]
+    result = mock_api.create_specimen_measure("2600000001", measure)
+    assert mock_api.get_calls("create_specimen_measure") == [(("2600000001", measure), {})]
+    assert result["specimen"] == "2600000001"
+
+
+def test_mock_create_specimen_measures(mock_api, vg_objects):
+    result = mock_api.create_specimen_measures("2600000001", vg_objects["specimen_measures"])
+    mock_api.assert_called_once("create_specimen_measures")
+    assert len(result["measures"]) == len(vg_objects["specimen_measures"])
+
+
+def test_mock_link_sequencing_sample_extraction_pending_override(mock_api, vg_objects):
+    mock_api.set_return("link_sequencing_sample_extraction", {"match_status": "Pending"})
+    result = mock_api.link_sequencing_sample_extraction(vg_objects["sequencing_sample_lookup_1"], "2600000001C")
+    assert result == {"match_status": "Pending"}
+    mock_api.assert_called_once("link_sequencing_sample_extraction")
+
+
+def test_mock_upload_file_records_metadata_only_when_sent(mock_api):
+    mock_api.upload_file("a.vcf")
+    mock_api.upload_file("b.vcf", path=None, metadata={"genome_build": "GRCh37"})
+    calls = mock_api.get_calls("upload_file")
+    assert calls[0] == (("a.vcf",), {"path": "a.vcf"})
+    assert calls[1] == (("b.vcf",), {"path": None, "metadata": {"genome_build": "GRCh37"}})

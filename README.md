@@ -45,6 +45,25 @@ From Python it's `upload_file()` / `poll_upload_status()` / `download_annotated(
 **[Annotate a VCF](https://github.com/SACGF/variantgrid_api/wiki/Annotate-a-VCF)** on the wiki for batches, the
 submit-now/download-later pattern, and all the options.
 
+## Patients, specimens and extractions
+
+VariantGrid can record which patient, specimen and extraction a lab's sequencing came from, and specimen-level
+measures such as TMB, MSI and GIS. This needs a server at or after SACGF/variantgrid#1716.
+
+```
+from variantgrid_api.data_models import Patient, Specimen, Extraction, ExternalReference, NucleicAcid
+
+api.create_patient(Patient(patient_code="C0000001"))
+api.create_specimen(Specimen(patient="C0000001", reference_id="2600000001"))
+api.create_extraction(Extraction(specimen="2600000001", reference_id="2600000001C",
+                                 nucleic_acid_source=NucleicAcid.DNA))
+api.upload_file("sample.vcf.gz", path=None,
+                metadata={"extraction": "2600000001C", "genome_build": "GRCh37"})
+```
+
+A bare string names a record by its local reference. Use `ExternalReference(code=..., external_type=...)` to
+name it by a LIMS identifier instead. See `examples/example_tso500.py` for a full run.
+
 ## Testing
 
 ```

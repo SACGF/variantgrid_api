@@ -12,7 +12,9 @@ from typing import List, Optional, Callable, Union
 import requests
 
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, JointCalledVCF, \
-    SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer
+    SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer, \
+    SequencingSampleLookup, Patient, Specimen, Extraction, SpecimenMeasure, ExternalReference, ReferenceLike, \
+    reference_json
 
 
 _UNSET = object()
@@ -109,6 +111,12 @@ class VariantGridAPI:
     def _validate_object(self, info: str, obj):
         if obj is None:
             self.validation_handler(f"{info}: is None")
+
+    def _validate_reference(self, info: str, reference: Optional[ReferenceLike]):
+        if isinstance(reference, str):
+            self._validate_string(info, reference)
+        else:
+            self._validate_object(info, reference)
 
     def _validate_list(self, info: str, list_obj: List):
         if not list_obj:
@@ -235,7 +243,60 @@ class VariantGridAPI:
         return self._post("seqauto/api/v1/qc_gene_coverage/bulk_create",
                           json_data)
 
-    def upload_file(self, filename: str, path=_UNSET):
+    ##########################################################
+    ## Patient -> Specimen -> Extraction (SACGF/variantgrid#1707)
+    ## Creates are upserts keyed on the identifiers sent, so re-posting returns the same rows
+
+    def create_patient(self, patient: Patient):
+        self._validate_object("patient", patient)
+        return self._post("patients/api/v1/patient/", patient.to_dict())
+
+    def create_specimen(self, specimen: Specimen):
+        """ The specimen's patient must already exist on the server, otherwise this is a 400 """
+        self._validate_object("specimen", specimen)
+        return self._post("patients/api/v1/specimen/", specimen.to_dict())
+
+    def create_extraction(self, extraction: Extraction):
+        """ The extraction's specimen must already exist on the server, otherwise this is a 400 """
+        self._validate_object("extraction", extraction)
+        return self._post("patients/api/v1/extraction/", extraction.to_dict())
+
+    def create_specimen_measure(self, specimen_reference: ReferenceLike, measure: SpecimenMeasure):
+        """ An unknown specimen is a 400. Replaces any existing measure of the same type for the specimen """
+        self._validate_reference("specimen_reference", specimen_reference)
+        self._validate_object("measure", measure)
+        json_data = {"specimen": reference_json(specimen_reference), **measure.to_dict()}
+        return self._post("patients/api/v1/specimen_measure/", json_data)
+
+    def create_specimen_measures(self, specimen_reference: ReferenceLike, measures: List[SpecimenMeasure]):
+        """ A run's measures (TMB, MSI, GIS etc) against one specimen in one call """
+        self._validate_reference("specimen_reference", specimen_reference)
+        self._validate_list("measures", measures)
+        json_data = {
+            "specimen": reference_json(specimen_reference),
+            "measures": [measure.to_dict() for measure in measures],
+        }
+        return self._post("patients/api/v1/specimen_measure/bulk_create", json_data)
+
+    def link_sequencing_sample_extraction(self, sequencing_sample_lookup: SequencingSampleLookup,
+                                          extraction_reference: ReferenceLike) -> dict:
+        """ Name the extraction a sequencing sample was made from. One call per sequencing sample is
+            enough - the server carries it to every Sample made from that sample's VCFs, and on to the
+            new rows if the sample sheet is re-sent.
+
+            Returns {"sequencing_sample", "match_status", "match_error", "extraction"}. An unknown
+            sequencing sample is a 400, but an extraction the server doesn't have yet is not an error:
+            the response is a 202 with match_status 'Pending', and the link attaches itself once the
+            extraction is created - there's no need to re-send. """
+        self._validate_object("sequencing_sample_lookup", sequencing_sample_lookup)
+        self._validate_reference("extraction_reference", extraction_reference)
+        json_data = {
+            "sequencing_sample": sequencing_sample_lookup.to_dict(),
+            "extraction": reference_json(extraction_reference),
+        }
+        return self._post("seqauto/api/v1/sequencing_sample/link_extraction", json_data)
+
+    def upload_file(self, filename: str, path=_UNSET, metadata: Optional[dict] = None):
         """ Upload a file via multipart POST to upload/api/v1/file_upload.
 
             Returns {"uploaded_file_id": <id>, "sha256_hash": <hash>, ...}; identify the upload by
@@ -245,15 +306,42 @@ class VariantGridAPI:
                   (JointCalledVCF / SingleSampleVCF) by path. Defaults to `filename` for backwards
                   compatibility. Pass path=None to omit the query param entirely - required for ad-hoc
                   uploads such as the annotate/download flow, where sending a client-side path makes
-                  SeqAuto deployments try (and fail) to match it to a registered VCF. """
+                  SeqAuto deployments try (and fail) to match it to a registered VCF.
+
+            metadata: facts about the file it doesn't carry itself, sent as extra query params. A VCF accepts:
+                  'genome_build' - the build's own name ('GRCh37'), not an alias ('hg19')
+                  'source' - the caller/software, eg 'DRAGEN TSO500 SmallVariant'
+                  'extraction' - reference (str or ExternalReference) for every sample in the file
+                  'sample_extractions' - {vcf_sample_name: reference} for a multi-sample VCF
+                  Send 'extraction' or 'sample_extractions', not both. An unknown key is a 400. An extraction
+                  the server doesn't have yet is not - it attaches once the extraction is created.
+                  Needs a server at or after SACGF/variantgrid#1716 """
         url = self._get_url("upload/api/v1/file_upload")
         if path is _UNSET:
             path = filename
         params = {"path": path} if path is not None else {}
+        if metadata:
+            params.update(self._upload_metadata_params(metadata))
         with open(filename, "rb") as f:
             response = requests.post(url, headers=self.headers, files={"file": f}, params=params)
             extra_error_message = f"{filename=}"
             return self._handle_json_response(response, extra_error_message)
+
+    @staticmethod
+    def _upload_metadata_params(metadata: dict) -> dict:
+        """ Query params are strings - references and objects go as JSON, which the server parses """
+        if reserved := {"path", "force"} & set(metadata):
+            raise ValueError(f"Upload metadata can't use reserved query param(s): {', '.join(sorted(reserved))}")
+        params = {}
+        for key, value in metadata.items():
+            if isinstance(value, ExternalReference):
+                value = reference_json(value)
+            elif isinstance(value, dict):
+                value = {k: reference_json(v) for k, v in value.items()}
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value)
+            params[key] = value
+        return params
 
     ###############
     ## Get methods

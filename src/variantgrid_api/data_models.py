@@ -2,7 +2,8 @@ import re
 import warnings
 from datetime import date, datetime
 from dataclasses import dataclass, field
-from typing import Optional, List
+from enum import Enum
+from typing import Optional, List, Union
 
 from dataclasses_json import dataclass_json, config
 
@@ -268,3 +269,174 @@ class QCGeneCoverage:
         Then, later we upload the coverage file - and match via path """
     qc: QC
     path: str
+
+
+############################################################
+## Patient -> Specimen -> Extraction (SACGF/variantgrid#1707)
+
+class Sex(str, Enum):
+    UNKNOWN = "U"
+    MALE = "M"
+    FEMALE = "F"
+
+
+class TissueStatus(str, Enum):
+    """ The role the material plays in the test. Blood is the reference in a solid tumour workup
+        but the tumour in leukaemia, so this belongs to the specimen, not the tissue """
+    REFERENCE = "R"  # reference / unaffected
+    AFFECTED = "A"   # affected / lesional
+    UNKNOWN = "U"
+
+
+class NucleicAcid(str, Enum):
+    DNA = "D"
+    RNA = "R"
+
+
+class SpecimenMeasureType(str, Enum):
+    TMB = "T"              # Tumour mutational burden
+    MSI = "M"              # Microsatellite instability
+    GIS = "G"              # Genomic instability score
+    TUMOUR_FRACTION = "F"
+    PLOIDY = "P"
+
+
+def _exclude_none():
+    return config(exclude=lambda x: x is None)
+
+
+@dataclass_json
+@dataclass
+class ExternalPK:
+    """ The key an external system (eg a LIMS) knows a record by. The server's ExternalPK is unique on all
+        three, so all three are required """
+    code: str
+    external_type: str      # which identifier scheme the code belongs to, eg 'HelixID'
+    external_manager: str   # the system that owns the record, eg 'HELIX'
+
+
+@dataclass_json
+@dataclass
+class ExternalReference:
+    """ Names an existing Patient / Specimen / Extraction: by its local reference (reference_id, or
+        patient_code for a patient), by an ExternalPK (code + external_type, optionally narrowed to
+        one external_manager), or by both.
+
+        Wherever a reference is taken a bare string works too, and means the local reference. """
+    reference_id: Optional[str] = field(default=None, metadata=_exclude_none())
+    code: Optional[str] = field(default=None, metadata=_exclude_none())
+    external_type: Optional[str] = field(default=None, metadata=_exclude_none())
+    external_manager: Optional[str] = field(default=None, metadata=_exclude_none())
+
+    def __post_init__(self):
+        if not (self.reference_id or self.code):
+            raise ValueError("ExternalReference must supply 'reference_id' or 'code'")
+        if bool(self.code) != bool(self.external_type):
+            # A code alone names nothing - the server would 400
+            raise ValueError("ExternalReference 'code' and 'external_type' must be supplied together")
+
+    def to_json_value(self) -> Union[str, dict]:
+        """ A bare string when only reference_id is set, otherwise an object """
+        data = self.to_dict()
+        if list(data) == ["reference_id"]:
+            return self.reference_id
+        return data
+
+    @staticmethod
+    def _from_local_and_external(local_reference: Optional[str],
+                                 external_pk: Optional[ExternalPK]) -> 'ExternalReference':
+        kwargs = {"reference_id": local_reference}
+        if external_pk:
+            kwargs.update(code=external_pk.code, external_type=external_pk.external_type,
+                          external_manager=external_pk.external_manager)
+        return ExternalReference(**kwargs)
+
+    @staticmethod
+    def from_patient(patient: 'Patient') -> 'ExternalReference':
+        return ExternalReference._from_local_and_external(patient.patient_code, patient.external_pk)
+
+    @staticmethod
+    def from_specimen(specimen: 'Specimen') -> 'ExternalReference':
+        return ExternalReference._from_local_and_external(specimen.reference_id, specimen.external_pk)
+
+    @staticmethod
+    def from_extraction(extraction: 'Extraction') -> 'ExternalReference':
+        return ExternalReference._from_local_and_external(extraction.reference_id, extraction.external_pk)
+
+
+ReferenceLike = Union[str, ExternalReference]
+
+
+def reference_json(reference: Optional[ReferenceLike]) -> Union[str, dict, None]:
+    """ JSON for a reference given as a bare string or an ExternalReference """
+    if isinstance(reference, ExternalReference):
+        return reference.to_json_value()
+    return reference
+
+
+def _reference_field(**kwargs):
+    return field(metadata=config(encoder=reference_json, exclude=lambda x: x is None), **kwargs)
+
+
+@dataclass_json
+@dataclass
+class Patient:
+    """ Everything is optional, but send patient_code and/or external_pk - they are what a re-post
+        matches on, so without either every post creates a new patient """
+    patient_code: Optional[str] = field(default=None, metadata=_exclude_none())
+    family_code: Optional[str] = field(default=None, metadata=_exclude_none())
+    first_name: Optional[str] = field(default=None, metadata=_exclude_none())
+    last_name: Optional[str] = field(default=None, metadata=_exclude_none())
+    date_of_birth: Optional[date] = field(default=None, metadata=_exclude_none())
+    date_of_death: Optional[date] = field(default=None, metadata=_exclude_none())
+    sex: Optional[Sex] = field(default=None, metadata=_exclude_none())
+    affected: Optional[bool] = field(default=None, metadata=_exclude_none())
+    external_pk: Optional[ExternalPK] = field(default=None, metadata=_exclude_none())
+
+
+@dataclass_json
+@dataclass
+class Specimen:
+    """ reference_id is unique per patient, not globally """
+    patient: ReferenceLike = _reference_field()
+    reference_id: str
+    description: Optional[str] = field(default=None, metadata=_exclude_none())
+    collected_by: Optional[str] = field(default=None, metadata=_exclude_none())
+    collection_date: Optional[datetime] = field(default=None, metadata=_exclude_none())
+    received_date: Optional[datetime] = field(default=None, metadata=_exclude_none())
+    tissue_status: Optional[TissueStatus] = field(default=None, metadata=_exclude_none())
+    external_pk: Optional[ExternalPK] = field(default=None, metadata=_exclude_none())
+
+
+@dataclass_json
+@dataclass
+class Extraction:
+    """ One nucleic acid extraction off a specimen - a TSO 500 specimen has two, the DNA and RNA arms """
+    specimen: ReferenceLike = _reference_field()
+    reference_id: Optional[str] = field(default=None, metadata=_exclude_none())
+    nucleic_acid_source: Optional[NucleicAcid] = field(default=None, metadata=_exclude_none())
+    extraction_date: Optional[datetime] = field(default=None, metadata=_exclude_none())
+    external_pk: Optional[ExternalPK] = field(default=None, metadata=_exclude_none())
+
+
+@dataclass_json
+@dataclass
+class SpecimenMeasure:
+    """ A scalar measured on the specimen rather than on any one variant - TMB, MSI, GIS etc (SACGF/variantgrid#1559)
+
+        Transcribe these from vendor output rather than computing them, and put the raw block they came
+        from in source_payload. Send both the score (value) and the lab's call, with the threshold that
+        turned one into the other - that threshold is lab policy, not vendor output.
+
+        The specimen is passed to create_specimen_measure(s) rather than held here. A re-post for the
+        same specimen and measure_type replaces the previous value. """
+    measure_type: SpecimenMeasureType
+    value: Optional[float] = field(default=None, metadata=_exclude_none())
+    unit: Optional[str] = field(default=None, metadata=_exclude_none())             # eg 'mut/Mb', '%'
+    call: Optional[str] = field(default=None, metadata=_exclude_none())             # eg 'High', 'Stable'
+    threshold: Optional[str] = field(default=None, metadata=_exclude_none())
+    threshold_source: Optional[str] = field(default=None, metadata=_exclude_none())  # whose policy set it
+    method: Optional[str] = field(default=None, metadata=_exclude_none())           # tool and version
+    source_payload: Optional[dict] = field(default=None, metadata=_exclude_none())
+    measured_date: Optional[datetime] = field(default=None, metadata=_exclude_none())
+    extraction: Optional[ReferenceLike] = _reference_field(default=None)  # the arm that produced it
