@@ -173,12 +173,16 @@ class VariantGridAPI:
         for sf in sequencing_files:
             data = sf.to_dict()
             # put into hierarchial JSON DRF expects
-            fastq_r1 = data.pop("fastq_r1")
-            fastq_r2 = data.pop("fastq_r2")
-            data["unaligned_reads"] = {
-                "fastq_r1": {"path": fastq_r1},
-                "fastq_r2": {"path": fastq_r2}
-            }
+            fastq_r1 = data.pop("fastq_r1", None)
+            fastq_r2 = data.pop("fastq_r2", None)
+            if fastq_r1:
+                unaligned_reads = {"fastq_r1": {"path": fastq_r1}}
+                if fastq_r2:
+                    unaligned_reads["fastq_r2"] = {"path": fastq_r2}
+                data["unaligned_reads"] = unaligned_reads
+            elif fastq_r2:
+                raise ValueError(f"SequencingFile '{sf.sample_name}' has fastq_r2 without fastq_r1")
+            # No FastQs (BAM-first run) - server resolves the sample from sample_name
             records.append(data)
 
         json_data = {

@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import json
 import logging
@@ -38,6 +39,32 @@ def test_create_sequencing_data_builds_unaligned_reads(api, server, vg_objects):
     r0 = body["records"][0]
     assert "unaligned_reads" in r0
     assert "fastq_r1" in r0["unaligned_reads"] and "path" in r0["unaligned_reads"]["fastq_r1"]
+
+@responses.activate
+def test_create_sequencing_data_bam_first_omits_unaligned_reads(api, server, vg_objects):
+    """ BAM-first run (no FastQs) - record is just sample_name + bam_file + vcf_file """
+    url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
+    responses.add(responses.POST, url, json={"created": 2}, status=200)
+    sequencing_files = [dataclasses.replace(sf, fastq_r1=None, fastq_r2=None)
+                        for sf in vg_objects["sequencing_files"]]
+    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+    body = _last_json()
+    for record in body["records"]:
+        assert set(record.keys()) == {"sample_name", "bam_file", "vcf_file"}
+
+@responses.activate
+def test_create_sequencing_data_single_end_fastq(api, server, vg_objects):
+    url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
+    responses.add(responses.POST, url, json={"created": 2}, status=200)
+    sequencing_files = [dataclasses.replace(sf, fastq_r2=None) for sf in vg_objects["sequencing_files"]]
+    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+    r0 = _last_json()["records"][0]
+    assert list(r0["unaligned_reads"].keys()) == ["fastq_r1"]
+
+def test_create_sequencing_data_fastq_r2_without_r1_raises(api, vg_objects):
+    sf = dataclasses.replace(vg_objects["sequencing_files"][0], fastq_r1=None)
+    with pytest.raises(ValueError):
+        api.create_sequencing_data(vg_objects["sample_sheet_lookup"], [sf])
 
 def assert_post(api_call, url):
     responses.add(responses.POST, url, json={"ok": True}, status=200)

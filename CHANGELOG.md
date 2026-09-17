@@ -1,3 +1,14 @@
+## [1.5.0] - Unreleased
+
+### Added
+
+- [Accept sequencing data without FastQs (BAM-first runs)](https://github.com/SACGF/variantgrid_api/issues/18) - `SequencingFile.fastq_r1` / `fastq_r2` are now optional, for sequencers that emit BAM directly or runs where FastQs aren't kept. `create_sequencing_data()` only sends an `unaligned_reads` block when `fastq_r1` is set; otherwise the record is just `bam_file` + `vcf_file` and the server resolves the sample from `sample_name`. Requires the matching server support in SACGF/variantgrid (see SACGF/variantgrid_sapath#357). See `examples/example_bam_first_run.py`.
+
+### Changed
+
+- `SequencingFile` field order is now `sample_name, bam_file, vcf_file, fastq_r1, fastq_r2` (optional fields must come last). Keyword construction is unaffected; positional construction needs updating.
+- `create_sequencing_data()` sends a single-end `unaligned_reads` (no `fastq_r2`) when only `fastq_r1` is set, and raises `ValueError` if `fastq_r2` is set without `fastq_r1`. Records carrying both FastQs send exactly the payload they did before.
+
 ## [1.4.0] - 2026-08-07
 
 ### Added

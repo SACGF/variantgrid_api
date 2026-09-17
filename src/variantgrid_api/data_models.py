@@ -195,11 +195,12 @@ class VCFFile(SingleSampleVCF):
 @dataclass_json
 @dataclass
 class SequencingFile:
+    """ FastQs are optional - BAM-first runs (sequencer emits BAM, or FastQs not kept) send just BAM + VCF """
     sample_name: str
-    fastq_r1: str
-    fastq_r2: str
     bam_file: BamFile
     vcf_file: SingleSampleVCF
+    fastq_r1: Optional[str] = field(default=None, metadata=config(exclude=lambda x: x is None))
+    fastq_r2: Optional[str] = field(default=None, metadata=config(exclude=lambda x: x is None))
 
 
 @dataclass_json
