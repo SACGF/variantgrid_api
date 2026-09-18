@@ -12,7 +12,7 @@ A `.venv` is already set up in the repo.
 python3 -m pip install -e ".[test]"                         # pytest, pytest-cov, responses
 python3 -m pytest --cov=variantgrid_api                     # full suite (fast, no network)
 python3 -m pytest tests/test_api_client.py::test_create_experiment   # single test
-python3 -m build && twine upload dist/*                     # release (dist/ is gitignored)
+python3 -m build && twine upload dist/*                     # release - only with explicit user permission (dist/ is gitignored)
 ```
 
 No linter or formatter is configured.
@@ -52,4 +52,5 @@ Renames keep the old name as a deprecated alias that emits `DeprecationWarning`:
 - Every user-visible change goes in `CHANGELOG.md` under the top version (`## [x.y.z] - Unreleased` until released), using Added/Changed/Deprecated sections. Entries link the GitHub issue, name the new methods and fields, and note any server-side dependency.
 - Bump `version` in `pyproject.toml` together with the changelog.
 - Commit messages reference the issue, e.g. `SACGF/variantgrid_api#18 - <summary>` or `Release 1.3.2: <summary>`.
+- **Never upload to PyPI (`twine upload`) without explicit permission from the user for that release.** A PyPI version can't be replaced once uploaded. Committing, tagging and pushing don't imply permission to publish.
 - `claude/plans/` holds design plans for upcoming work (such as the server capabilities probe).
