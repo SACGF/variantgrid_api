@@ -21,7 +21,7 @@ No linter or formatter is configured.
 
 The package is `src/variantgrid_api/` (src layout) and has four modules:
 
-- **`data_models.py`**: `@dataclass_json` dataclasses that mirror the server's SeqAuto models (EnrichmentKit → SequencingRun → SampleSheet → SequencingSample, then JointCalledVCF / SequencingFile (BAM + SingleSampleVCF + optional FastQs) → QC* records). `.to_dict()` produces the JSON the client sends, so the JSON shape is controlled here:
+- **`data_models.py`**: `@dataclass_json` dataclasses that mirror the server's SeqAuto models (EnrichmentKit → SequencingRun → SampleSheet → SequencingSample, then JointCalledVCF / SequencingFile (BAM + SingleSampleVCFs, one per caller + optional FastQs) → QC* records). `.to_dict()` produces the JSON the client sends, so the JSON shape is controlled here:
   - Wire names that differ from field names use `field(metadata=config(field_name=...))`. For example, `JointCalledVCF.sample_sheet_lookup` is sent as `sample_sheet`.
   - Optional fields use `config(exclude=lambda x: x is None)`, so leaving a new field unset sends exactly the payload older clients sent. Keep this backwards-compatible pattern when adding fields. Optional fields must come after required ones.
   - Existing records are referenced through `*Lookup` objects (`SampleSheetLookup` = sequencing run name + sample sheet hash, and `SequencingSampleLookup`), not by nesting full objects.
@@ -41,7 +41,7 @@ Tests use `responses` to mock HTTP and assert on the posted JSON (`json.loads(re
 
 ## Deprecations
 
-Renames keep the old name as a deprecated alias that emits `DeprecationWarning`: a subclass with `__post_init__` for dataclasses (`SampleSheetCombinedVCFFile` → `JointCalledVCF`, `VCFFile` → `SingleSampleVCF`), or a wrapper method (`create_sample_sheet_combined_vcf_file`). The mock mirrors these aliases too.
+Renames keep the old name as a deprecated alias that emits `DeprecationWarning`: a subclass with `__post_init__` for dataclasses (`SampleSheetCombinedVCFFile` → `JointCalledVCF`, `VCFFile` → `SingleSampleVCF`), or a wrapper method (`create_sample_sheet_combined_vcf_file`). The mock mirrors these aliases too. A deprecated field stays optional and still works, warning in `__post_init__` when set (`SequencingFile.vcf_file` → `vcf_files`, read both through `get_vcf_files()`).
 
 ## Examples
 

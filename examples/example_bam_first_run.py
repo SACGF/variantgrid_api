@@ -30,7 +30,7 @@ def _get_qc_by_sample_name(sample_sheet_lookup: SampleSheetLookup, sequencing_fi
                                                           sample_name=sf.sample_name)
         qc_by_name[sf.sample_name] = QC(sequencing_sample_lookup=sequencing_sample_lookup,
                                         bam_file=dataclasses.replace(sf.bam_file, aligner=None),
-                                        vcf_file=dataclasses.replace(sf.vcf_file, variant_caller=None))
+                                        vcf_file=dataclasses.replace(sf.get_vcf_files()[0], variant_caller=None))
     return qc_by_name
 
 
@@ -88,8 +88,8 @@ def test_api(server, api_token, step=None):
         SequencingFile(sample_name=sample_name,
                        bam_file=BamFile(path=seq_run_path(f"1_BAM/{sample_name}.hg38.bam"),
                                         aligner=aligner),
-                       vcf_file=SingleSampleVCF(path=seq_run_path(f"2_variants/gatk_per_sample/{sample_name}.gatk.hg38.vcf.gz"),
-                                                variant_caller=variant_caller_gatk))
+                       vcf_files=[SingleSampleVCF(path=seq_run_path(f"2_variants/gatk_per_sample/{sample_name}.gatk.hg38.vcf.gz"),
+                                                  variant_caller=variant_caller_gatk)])
         for sample_name in sample_names
     ]
 

@@ -7,7 +7,7 @@ import pytest
 import responses
 
 from variantgrid_api.api_client import VariantGridAPI, DateTimeEncoder, EmptyInputPolicy
-from variantgrid_api.data_models import BamFile, SingleSampleVCF
+from variantgrid_api.data_models import BamFile, SequencingFile, SingleSampleVCF, VariantCaller
 
 
 def _last_json():
@@ -67,19 +67,21 @@ def test_create_sequencing_data_fastq_r2_without_r1_raises(api, vg_objects):
     with pytest.raises(ValueError):
         api.create_sequencing_data(vg_objects["sample_sheet_lookup"], [sf])
 
-@pytest.mark.parametrize("field, value", [
-    ("vcf_file", None),
-    ("vcf_file", SingleSampleVCF(path=None)),
-    ("vcf_file", SingleSampleVCF(path="")),
-    ("bam_file", None),
-    ("bam_file", BamFile(path=None)),
+@pytest.mark.parametrize("changes, name", [
+    ({"vcf_files": None}, "vcf_files"),
+    ({"vcf_files": []}, "vcf_files"),
+    ({"vcf_files": [None]}, r"vcf_files\[0\].path"),
+    ({"vcf_files": [SingleSampleVCF(path=None)]}, r"vcf_files\[0\].path"),
+    ({"vcf_files": [SingleSampleVCF(path="")]}, r"vcf_files\[0\].path"),
+    ({"bam_file": None}, "bam_file.path"),
+    ({"bam_file": BamFile(path=None)}, "bam_file.path"),
 ])
 @responses.activate
-def test_create_sequencing_data_missing_path_names_record(api, vg_objects, field, value):
+def test_create_sequencing_data_missing_path_names_record(api, vg_objects, changes, name):
     """ SACGF/variantgrid_api#23 - caught before sending, naming the record, rather than a 400 for the batch """
     sequencing_files = list(vg_objects["sequencing_files"])
-    sequencing_files[1] = dataclasses.replace(sequencing_files[1], **{field: value})
-    with pytest.raises(ValueError, match=f"SequencingFile 'fake_sample_2' {field}.path"):
+    sequencing_files[1] = dataclasses.replace(sequencing_files[1], **changes)
+    with pytest.raises(ValueError, match=f"SequencingFile 'fake_sample_2' {name}"):
         api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
     assert len(responses.calls) == 0
 
@@ -89,10 +91,55 @@ def test_create_sequencing_data_missing_vcf_path_warns_and_posts(server, api_tok
     url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
     responses.add(responses.POST, url, json={"created": 2}, status=200)
     sequencing_files = list(vg_objects["sequencing_files"])
-    sequencing_files[0] = dataclasses.replace(sequencing_files[0], vcf_file=SingleSampleVCF(path=None))
+    sequencing_files[0] = dataclasses.replace(sequencing_files[0], vcf_files=[SingleSampleVCF(path=None)])
     api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
     assert len(responses.calls) == 1
-    assert any("SequencingFile 'fake_sample_1' vcf_file.path" in r.message for r in caplog.records)
+    assert any("SequencingFile 'fake_sample_1' vcf_files[0].path" in r.message for r in caplog.records)
+
+@responses.activate
+def test_create_sequencing_data_vcf_files_share_the_bam(api, server, vg_objects):
+    """ eg DRAGEN TSO 500's CNV VCF beside its small variant VCF - one record per VCF, same BAM and FastQs """
+    url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
+    responses.add(responses.POST, url, json={"created": 3}, status=200)
+    cnv_vcf = SingleSampleVCF(path="/data/fake_sample_1.cnv.vcf", variant_caller=VariantCaller(name="cnv", version="1"))
+    sequencing_files = list(vg_objects["sequencing_files"])
+    sf = sequencing_files[0]
+    sequencing_files[0] = dataclasses.replace(sf, vcf_files=sf.vcf_files + [cnv_vcf])
+    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+
+    records = _last_json()["records"]
+    assert [r["sample_name"] for r in records] == ["fake_sample_1", "fake_sample_1", "fake_sample_2"]
+    first, second = records[0], records[1]
+    assert "vcf_files" not in first
+    assert first["vcf_file"]["path"] == sf.vcf_files[0].path
+    assert second["vcf_file"]["path"] == "/data/fake_sample_1.cnv.vcf"
+    assert second["bam_file"] == first["bam_file"]
+    assert second["unaligned_reads"] == first["unaligned_reads"]
+
+def test_create_sequencing_data_vcf_files_same_caller_raises(api, vg_objects):
+    """ The server keeps one VCF per BAM and caller, so the second would silently replace the first's path """
+    sf = vg_objects["sequencing_files"][0]
+    same_caller = SingleSampleVCF(path="/data/other.vcf", variant_caller=sf.vcf_files[0].variant_caller)
+    sf = dataclasses.replace(sf, vcf_files=sf.vcf_files + [same_caller])
+    with pytest.raises(ValueError, match="fake_sample_1.*more than one VCF"):
+        api.create_sequencing_data(vg_objects["sample_sheet_lookup"], [sf])
+
+@responses.activate
+def test_create_sequencing_data_deprecated_vcf_file_still_sent(api, server, vg_objects):
+    """ vcf_file is deprecated for vcf_files, but a client still using it sends the same records as before """
+    url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
+    responses.add(responses.POST, url, json={"created": 2}, status=200)
+    old_style = []
+    for sf in vg_objects["sequencing_files"]:
+        with pytest.warns(DeprecationWarning, match="vcf_file is deprecated"):
+            old_style.append(SequencingFile(sample_name=sf.sample_name, bam_file=sf.bam_file,
+                                            vcf_file=sf.vcf_files[0], fastq_r1=sf.fastq_r1, fastq_r2=sf.fastq_r2))
+    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], old_style)
+    old_records = _last_json()["records"]
+
+    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], vg_objects["sequencing_files"])
+    assert old_records == _last_json()["records"]
+    assert old_style[0].vcf_file.path == old_style[0].get_vcf_files()[0].path
 
 def assert_post(api_call, url):
     responses.add(responses.POST, url, json={"ok": True}, status=200)

@@ -31,7 +31,7 @@ def _get_qc_by_sample_name(sample_sheet_lookup: SampleSheetLookup, sequencing_fi
     bam_and_vcf_by_name = {}
     for sf in sequencing_files:
         bam_file = dataclasses.replace(sf.bam_file, aligner=None)
-        vcf_file = dataclasses.replace(sf.vcf_file, variant_caller=None)
+        vcf_file = dataclasses.replace(sf.get_vcf_files()[0], variant_caller=None)
         bam_and_vcf_by_name[sf.sample_name] = (bam_file, vcf_file)
 
     qc_by_name = {}
@@ -138,12 +138,12 @@ def test_api(server, api_token, step=None):
                        fastq_r1=seq_run_path("0_fastq/fake_sample_1_R1.fastq.gz"),
                        fastq_r2=seq_run_path("0_fastq/fake_sample_1_R2.fastq.gz"),
                        bam_file=bam_file_1,
-                       vcf_file=vcf_file_1),
+                       vcf_files=[vcf_file_1]),
         SequencingFile(sample_name="fake_sample_2",
                        fastq_r1=seq_run_path("0_fastq/fake_sample_2_R1.fastq.gz"),
                        fastq_r2=seq_run_path("0_fastq/fake_sample_2_R1.fastq.gz"),
                        bam_file=bam_file_2,
-                       vcf_file=vcf_file_2)
+                       vcf_files=[vcf_file_2])
     ]
 
     qc_by_sample_name = _get_qc_by_sample_name(sample_sheet_lookup, sequencing_files)

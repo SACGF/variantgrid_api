@@ -1,3 +1,14 @@
+## [Unreleased]
+
+### Added
+
+- `SequencingFile.vcf_files` - every VCF called off the BAM, one per variant caller, eg DRAGEN TSO 500's gene-level CNV VCF and AllFusions beside its small variant VCF (SACGF/variantgrid_sapath#443). `create_sequencing_data()` sends each as its own record sharing the BAM and FastQs, which servers already accept. Each needs a `variant_caller` (name + version) different from the others': the server keeps one VCF per BAM and caller, so a repeat would silently replace the earlier path - the client raises `ValueError` naming the record instead. Linking every caller's VCF to the run (rather than the newest replacing the rest) needs the matching SACGF/variantgrid change.
+- `SequencingFile.get_vcf_files()` - `vcf_file` (if set) then `vcf_files`.
+
+### Deprecated
+
+- `SequencingFile.vcf_file` - use `vcf_files`. It still works: it is now optional, setting it warns (`DeprecationWarning`) and it is sent as before, and reading it back returns what was set. Setting both sends both. Missing-path errors now name `vcf_files[<i>].path`.
+
 ## [1.6.0] - 2026-09-18
 
 ### Added

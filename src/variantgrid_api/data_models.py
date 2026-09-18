@@ -196,12 +196,33 @@ class VCFFile(SingleSampleVCF):
 @dataclass_json
 @dataclass
 class SequencingFile:
-    """ FastQs are optional - BAM-first runs (sequencer emits BAM, or FastQs not kept) send just BAM + VCF """
+    """ FastQs are optional - BAM-first runs (sequencer emits BAM, or FastQs not kept) send just BAM + VCF
+
+        vcf_files: the VCFs called off this BAM, one per variant caller, eg DRAGEN TSO 500's small variant VCF and
+        its gene-level CNV VCF. The server keeps one VCF per BAM and caller, so a second with the same caller
+        would replace the first - create_sequencing_data() raises instead.
+
+        vcf_file is deprecated - use vcf_files. It still works (set it and it is sent, read it back as before),
+        and get_vcf_files() gives both """
     sample_name: str
     bam_file: BamFile
-    vcf_file: SingleSampleVCF
+    vcf_file: Optional[SingleSampleVCF] = field(default=None, metadata=config(exclude=lambda x: x is None))
     fastq_r1: Optional[str] = field(default=None, metadata=config(exclude=lambda x: x is None))
     fastq_r2: Optional[str] = field(default=None, metadata=config(exclude=lambda x: x is None))
+    vcf_files: Optional[List[SingleSampleVCF]] = field(default=None, metadata=config(exclude=lambda x: x is None))
+
+    def __post_init__(self):
+        if self.vcf_file is not None:
+            warnings.warn(
+                "SequencingFile.vcf_file is deprecated; use vcf_files instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+
+    def get_vcf_files(self) -> List[SingleSampleVCF]:
+        """ vcf_file (deprecated) then vcf_files """
+        vcf_files = [self.vcf_file] if self.vcf_file is not None else []
+        return vcf_files + list(self.vcf_files or [])
 
 
 @dataclass_json

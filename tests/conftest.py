@@ -1,3 +1,4 @@
+import dataclasses
 import os
 from datetime import datetime
 from pathlib import Path
@@ -119,17 +120,17 @@ def vg_objects(data_dir):
         SequencingFile(sample_name="fake_sample_1",
                        fastq_r1=seq_run_path("0_fastq/fake_sample_1_R1.fastq.gz"),
                        fastq_r2=seq_run_path("0_fastq/fake_sample_1_R2.fastq.gz"),
-                       bam_file=bam_file_1, vcf_file=vcf_file_1),
+                       bam_file=bam_file_1, vcf_files=[vcf_file_1]),
         SequencingFile(sample_name="fake_sample_2",
                        fastq_r1=seq_run_path("0_fastq/fake_sample_2_R1.fastq.gz"),
                        fastq_r2=seq_run_path("0_fastq/fake_sample_2_R1.fastq.gz"),
-                       bam_file=bam_file_2, vcf_file=vcf_file_2),
+                       bam_file=bam_file_2, vcf_files=[vcf_file_2]),
     ]
 
     bam_and_vcf = {}
     for sf in sequencing_files:
         bam_and_vcf[sf.sample_name] = (sf.bam_file.__class__(**{**sf.bam_file.__dict__, "aligner": None}),
-                                       sf.vcf_file.__class__(**{**sf.vcf_file.__dict__, "variant_caller": None}))
+                                       dataclasses.replace(sf.vcf_files[0], variant_caller=None))
 
     qc_by_name = {}
     for sample_name, (bam_file, vcf_file) in bam_and_vcf.items():

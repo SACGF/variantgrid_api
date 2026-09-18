@@ -243,8 +243,20 @@ class VariantGridAPI:
         for sf in sequencing_files:
             # The server requires both paths - catch it here, naming the record, rather than a 400 for the batch
             self._validate_string(f"SequencingFile '{sf.sample_name}' bam_file.path", sf.bam_file and sf.bam_file.path)
-            self._validate_string(f"SequencingFile '{sf.sample_name}' vcf_file.path", sf.vcf_file and sf.vcf_file.path)
+            vcf_files = sf.get_vcf_files()
+            self._validate_list(f"SequencingFile '{sf.sample_name}' vcf_files", vcf_files)
+            for i, vcf_file in enumerate(vcf_files):
+                self._validate_string(f"SequencingFile '{sf.sample_name}' vcf_files[{i}].path",
+                                      vcf_file and vcf_file.path)
+            # The server keeps one VCF per BAM and caller - a repeated caller would silently replace a path
+            callers = [f"{vc.name} {vc.version}" for vcf_file in vcf_files
+                       if vcf_file and (vc := vcf_file.variant_caller)]
+            if repeated := {c for c in callers if callers.count(c) > 1}:
+                raise ValueError(f"SequencingFile '{sf.sample_name}' has more than one VCF from variant caller(s) "
+                                 f"{', '.join(sorted(repeated))} - each VCF off a BAM needs its own caller")
             data = sf.to_dict()
+            data.pop("vcf_file", None)
+            data.pop("vcf_files", None)
             # put into hierarchial JSON DRF expects
             fastq_r1 = data.pop("fastq_r1", None)
             fastq_r2 = data.pop("fastq_r2", None)
@@ -255,8 +267,10 @@ class VariantGridAPI:
                 data["unaligned_reads"] = unaligned_reads
             elif fastq_r2:
                 raise ValueError(f"SequencingFile '{sf.sample_name}' has fastq_r2 without fastq_r1")
-            # No FastQs (BAM-first run) - server resolves the sample from sample_name
-            records.append(data)
+            # No FastQs (BAM-first run) - server resolves the sample from sample_name.
+            # The server takes one VCF per record, so each is a record sharing the BAM and FastQs
+            for vcf_file in vcf_files:
+                records.append({**data, "vcf_file": vcf_file.to_dict() if vcf_file else None})
 
         json_data = {
             "sample_sheet": sample_sheet_lookup.to_dict(),
