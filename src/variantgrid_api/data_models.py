@@ -442,6 +442,48 @@ class SpecimenMeasure:
     extraction: Optional[ReferenceLike] = _reference_field(default=None)  # the arm that produced it
 
 
+############################################################
+## Server capabilities (SACGF/variantgrid_api#22)
+
+class _ServerName(str, Enum):
+    """ A name from the server's vocabulary. Subclasses str so plain strings and these are interchangeable,
+        and formats as its value so messages read 'patients' rather than 'ServerFeature.PATIENTS' """
+
+    def __str__(self):
+        return self.value
+
+    def __format__(self, format_spec):
+        return format(self.value, format_spec)
+
+
+class ServerFeature(_ServerName):
+    """ Features a server reports in capabilities (API_FEATURES in the variantgrid repo's
+        variantgrid/views_rest.py). Names are never removed - an older server just doesn't list a newer one """
+    PATIENTS = "patients"
+    SPECIMEN_MEASURES = "specimen_measures"
+    LINK_EXTRACTION = "link_extraction"
+    UPLOAD_STATUS = "upload_status"
+    JOINT_CALLED_VCF_CROSS_RUN = "joint_called_vcf_cross_run"
+    UPLOAD_METADATA = "upload_metadata"
+
+
+class UploadFileType(_ServerName):
+    """ File types a server imports from an upload - the server's upload.models.UploadedFileTypes names in
+        lower case, less the internal ones it drives itself. A server only reports those it has an importer for """
+    BED = "bed"
+    DRAGEN_TSO500_ALL_FUSIONS = "dragen_tso500_all_fusions"
+    DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT = "dragen_tso500_combined_variant_output"
+    GENE_COVERAGE = "gene_coverage"
+    GENE_LIST = "gene_list"
+    GENE_LEVEL_CNV_VCF = "gene_level_cnv_vcf"
+    GENE_LEVEL_INSERT_VARIANTS_ONLY = "gene_level_insert_variants_only"
+    PATIENT_RECORDS = "patient_records"
+    PED = "ped"
+    VARIANT_CLASSIFICATIONS = "variant_classifications"
+    VCF = "vcf"
+    VCF_INSERT_VARIANTS_ONLY = "vcf_insert_variants_only"
+
+
 @dataclass(frozen=True)
 class ServerCapabilities:
     """ What a server accepts, from GET api/v1/capabilities (SACGF/variantgrid_sapath#443).

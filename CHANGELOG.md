@@ -1,3 +1,13 @@
+## [1.6.0] - Unreleased
+
+### Added
+
+- [Constants for server feature names and upload file types](https://github.com/SACGF/variantgrid_api/issues/22) - new `str` enums `ServerFeature` (the server's `API_FEATURES`) and `UploadFileType` (the server's client-uploadable `UploadedFileTypes` names, lower case), in `variantgrid_api.data_models`. Pass them to `supports()`, `accepts_upload()` and `upload_file(file_type=...)` so a typo is an `AttributeError` instead of a silently skipped call. They subclass `str`, so plain strings keep working, and they format as their value in messages. Names are kept once added: an older server just doesn't list a newer one.
+
+### Changed
+
+- The client, `MockVariantGridAPI` (including its default capabilities) and `examples/example_tso500.py` use the new enums internally. Behaviour is unchanged.
+
 ## [1.5.0] - 2026-09-17
 
 ### Added

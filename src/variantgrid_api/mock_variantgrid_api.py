@@ -16,20 +16,21 @@ import copy
 import logging
 import warnings
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 from variantgrid_api.api_client import UnsupportedFeaturePolicy, UnsupportedFeatureError
-from variantgrid_api.data_models import reference_json, ServerCapabilities
+from variantgrid_api.data_models import reference_json, ServerCapabilities, ServerFeature, UploadFileType
 
 _UNSET = object()
 
 # Every feature and upload file type the real client gates on - the shape of a current (VG4) server
 MOCK_CAPABILITIES = ServerCapabilities(
     version="mock",
-    features=frozenset({"patients", "specimen_measures", "link_extraction", "upload_status",
-                        "joint_called_vcf_cross_run", "upload_metadata"}),
-    upload_file_types=frozenset({"vcf", "gene_coverage", "dragen_tso500_all_fusions",
-                                 "dragen_tso500_combined_variant_output", "gene_level_cnv_vcf"}),
+    features=frozenset(ServerFeature),
+    upload_file_types=frozenset({UploadFileType.VCF, UploadFileType.GENE_COVERAGE,
+                                 UploadFileType.DRAGEN_TSO500_ALL_FUSIONS,
+                                 UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT,
+                                 UploadFileType.GENE_LEVEL_CNV_VCF}),
 )
 
 
@@ -86,10 +87,10 @@ class MockVariantGridAPI:
     # Capabilities — same gating as VariantGridAPI                        #
     # ------------------------------------------------------------------ #
 
-    def supports(self, feature: str) -> bool:
+    def supports(self, feature: Union[ServerFeature, str]) -> bool:
         return feature in self.capabilities.features
 
-    def accepts_upload(self, file_type: str) -> bool:
+    def accepts_upload(self, file_type: Union[UploadFileType, str]) -> bool:
         return file_type in self.capabilities.upload_file_types
 
     def _unsupported(self, message: str) -> bool:
@@ -99,10 +100,10 @@ class MockVariantGridAPI:
             return False
         raise UnsupportedFeatureError(message, self.capabilities)
 
-    def _require(self, feature: str) -> bool:
+    def _require(self, feature: Union[ServerFeature, str]) -> bool:
         return self.supports(feature) or self._unsupported(f"server doesn't support feature '{feature}'")
 
-    def _require_upload(self, file_type: str) -> bool:
+    def _require_upload(self, file_type: Union[UploadFileType, str]) -> bool:
         return self.accepts_upload(file_type) or self._unsupported(f"server doesn't accept upload file type '{file_type}'")
 
     # ------------------------------------------------------------------ #
@@ -181,39 +182,39 @@ class MockVariantGridAPI:
         return self._ret("create_multiple_qc_gene_coverage", {"created": len(qc_gene_coverage_list)})
 
     def create_patient(self, patient):
-        if not self._require("patients"):
+        if not self._require(ServerFeature.PATIENTS):
             return None
         self._record("create_patient", patient)
         return self._ret("create_patient", {"id": 1, **patient.to_dict()})
 
     def create_specimen(self, specimen):
-        if not self._require("patients"):
+        if not self._require(ServerFeature.PATIENTS):
             return None
         self._record("create_specimen", specimen)
         return self._ret("create_specimen", {"id": 1, **specimen.to_dict()})
 
     def create_extraction(self, extraction):
-        if not self._require("patients"):
+        if not self._require(ServerFeature.PATIENTS):
             return None
         self._record("create_extraction", extraction)
         return self._ret("create_extraction", {"id": 1, **extraction.to_dict()})
 
     def create_specimen_measure(self, specimen_reference, measure):
-        if not self._require("specimen_measures"):
+        if not self._require(ServerFeature.SPECIMEN_MEASURES):
             return None
         self._record("create_specimen_measure", specimen_reference, measure)
         return self._ret("create_specimen_measure", {"id": 1, "specimen": reference_json(specimen_reference),
                                                      **measure.to_dict()})
 
     def create_specimen_measures(self, specimen_reference, measures):
-        if not self._require("specimen_measures"):
+        if not self._require(ServerFeature.SPECIMEN_MEASURES):
             return None
         self._record("create_specimen_measures", specimen_reference, measures)
         return self._ret("create_specimen_measures", {"specimen": reference_json(specimen_reference),
                                                       "measures": [m.to_dict() for m in measures]})
 
     def link_sequencing_sample_extraction(self, sequencing_sample_lookup, extraction_reference):
-        if not self._require("link_extraction"):
+        if not self._require(ServerFeature.LINK_EXTRACTION):
             return None
         self._record("link_sequencing_sample_extraction", sequencing_sample_lookup, extraction_reference)
         return self._ret("link_sequencing_sample_extraction", {
@@ -224,7 +225,7 @@ class MockVariantGridAPI:
         })
 
     def upload_file(self, filename, path=_UNSET, metadata=None, file_type=None):
-        if metadata and not self.supports("upload_metadata"):
+        if metadata and not self.supports(ServerFeature.UPLOAD_METADATA):
             self._unsupported(f"upload metadata for '{filename}' (server doesn't support feature 'upload_metadata')")
             metadata = None
         if file_type and not self._require_upload(file_type):
@@ -240,7 +241,7 @@ class MockVariantGridAPI:
                                          "path": path, "status": "ok"})
 
     def poll_upload_status(self, uploaded_file_id=None, sha256=None):
-        if not self._require("upload_status"):
+        if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
         self._record("poll_upload_status", uploaded_file_id, sha256)
         return self._ret("poll_upload_status", {
@@ -252,7 +253,7 @@ class MockVariantGridAPI:
 
     def wait_for_annotation(self, uploaded_file_id=None, sha256=None,
                             timeout=3600, poll_interval=10, sleep=None, max_transient_errors=5):
-        if not self._require("upload_status"):
+        if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
         self._record("wait_for_annotation", uploaded_file_id, sha256,
                      timeout=timeout, poll_interval=poll_interval, sleep=sleep,
@@ -265,7 +266,7 @@ class MockVariantGridAPI:
 
     def download_annotated(self, uploaded_file_id=None, sha256=None, export_type="vcf",
                            dest_path=None, timeout=3600, poll_interval=10, sleep=None):
-        if not self._require("upload_status"):
+        if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
         self._record("download_annotated", uploaded_file_id, sha256, export_type=export_type,
                      dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep)
@@ -274,7 +275,7 @@ class MockVariantGridAPI:
 
     def annotate_vcf(self, filename, export_type="vcf", dest_path=None,
                      timeout=3600, poll_interval=10, sleep=None):
-        if not self._require("upload_status"):
+        if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
         self._record("annotate_vcf", filename, export_type=export_type, dest_path=dest_path,
                      timeout=timeout, poll_interval=poll_interval, sleep=sleep)

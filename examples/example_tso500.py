@@ -22,7 +22,7 @@ from typing import Dict
 from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
 from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, \
     SampleSheet, SampleSheetLookup, SequencingSampleLookup, Patient, Specimen, Extraction, \
-    SpecimenMeasure, ExternalReference, TissueStatus, NucleicAcid, SpecimenMeasureType
+    SpecimenMeasure, ExternalReference, TissueStatus, NucleicAcid, SpecimenMeasureType, UploadFileType
 
 
 def parse_args():
@@ -152,8 +152,7 @@ def test_api(server, api_token, step=None):
 
     # SKIP: calls an older server doesn't support are logged and skipped, so this runs against VG3 and VG4
     vg_api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
-    cvo_file_type = "dragen_tso500_combined_variant_output"
-    accepts_cvo = vg_api.accepts_upload(cvo_file_type)
+    accepts_cvo = vg_api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
     print(f"Server version: {vg_api.capabilities.version}, {accepts_cvo=}")
 
     # The one real branch: a server that imports the CVO takes the splice calls from it (sending the
@@ -181,7 +180,7 @@ def test_api(server, api_token, step=None):
     }
     # 4. Uploads. path=None as these aren't registered SeqAuto VCFs - the metadata names the extraction instead
     for name, (filename, metadata) in uploads.items():
-        file_type = cvo_file_type if name == "combined_variant_output" else None
+        file_type = UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT if name == "combined_variant_output" else None
         API_STEPS[f"upload_{name}"] = lambda f=filename, m=metadata, t=file_type: vg_api.upload_file(
             f, path=None, metadata=m, file_type=t)
     # 5. Measures describe the specimen; the DNA arm produced them

@@ -6,7 +6,7 @@ import requests
 import responses
 
 from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy, UnsupportedFeatureError
-from variantgrid_api.data_models import ServerCapabilities
+from variantgrid_api.data_models import ServerCapabilities, ServerFeature, UploadFileType
 
 CVO = "dragen_tso500_combined_variant_output"
 
@@ -51,6 +51,33 @@ def test_capabilities_parsed_and_fetched_once(api, capabilities_url, capabilitie
     assert capabilities.git_hash == "2130cffe0"
     assert isinstance(capabilities.features, frozenset)
     assert len(_capabilities_calls(capabilities_url)) == 1
+
+
+@responses.activate
+def test_capabilities_accept_enums(api, capabilities_url, capabilities_json):
+    """ SACGF/variantgrid_api#22 - the enums are str, so they match the plain names the server sends """
+    responses.add(responses.GET, capabilities_url, json=capabilities_json, status=200)
+
+    assert all(api.supports(feature) for feature in ServerFeature)
+    assert api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
+    assert not api.accepts_upload(UploadFileType.GENE_LIST)
+
+
+def test_enums_are_their_server_names():
+    assert ServerFeature.PATIENTS == "patients"
+    assert str(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT) == CVO
+    assert f"'{ServerFeature.UPLOAD_METADATA}'" == "'upload_metadata'"
+    for enum_class in (ServerFeature, UploadFileType):
+        for member in enum_class:
+            assert member.value == member.name.lower()
+
+
+@responses.activate
+def test_unsupported_message_names_feature_value(api, capabilities_url, vg_objects):
+    responses.add(responses.GET, capabilities_url, json={"detail": "Not found."}, status=404)
+
+    with pytest.raises(UnsupportedFeatureError, match="feature 'patients'"):
+        api.create_patient(vg_objects["patient"])
 
 
 @responses.activate

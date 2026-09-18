@@ -3,7 +3,7 @@ overrides, and assertion helpers work correctly."""
 import pytest
 
 from variantgrid_api.api_client import UnsupportedFeaturePolicy, UnsupportedFeatureError
-from variantgrid_api.data_models import ServerCapabilities
+from variantgrid_api.data_models import ServerCapabilities, ServerFeature, UploadFileType
 from variantgrid_api.mock_variantgrid_api import MockVariantGridAPI
 
 
@@ -238,6 +238,15 @@ def test_mock_default_capabilities_support_everything_gated(mock_api, vg_objects
     mock_api.assert_called_once("create_patient")
     assert mock_api.get_calls("upload_file") == [
         (("cvo.tsv",), {"path": None, "file_type": "dragen_tso500_combined_variant_output"})]
+
+
+def test_mock_default_capabilities_accept_enums(mock_api):
+    assert all(mock_api.supports(feature) for feature in ServerFeature)
+    assert mock_api.supports("upload_status")
+    assert mock_api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
+    assert not mock_api.accepts_upload(UploadFileType.PED)
+    mock_api.upload_file("cvo.tsv", path=None, file_type=UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
+    mock_api.assert_called_once("upload_file")
 
 
 def test_mock_legacy_skips_under_skip(vg_objects):
