@@ -479,7 +479,6 @@ class UploadFileType(_ServerName):
     GENE_LEVEL_INSERT_VARIANTS_ONLY = "gene_level_insert_variants_only"
     PATIENT_RECORDS = "patient_records"
     PED = "ped"
-    VARIANT_CLASSIFICATIONS = "variant_classifications"
     VCF = "vcf"
     VCF_INSERT_VARIANTS_ONLY = "vcf_insert_variants_only"
 

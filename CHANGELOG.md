@@ -2,7 +2,7 @@
 
 ### Added
 
-- [Constants for server feature names and upload file types](https://github.com/SACGF/variantgrid_api/issues/22) - new `str` enums `ServerFeature` (the server's `API_FEATURES`) and `UploadFileType` (the server's client-uploadable `UploadedFileTypes` names, lower case), in `variantgrid_api.data_models`. Pass them to `supports()`, `accepts_upload()` and `upload_file(file_type=...)` so a typo is an `AttributeError` instead of a silently skipped call. They subclass `str`, so plain strings keep working, and they format as their value in messages. Names are kept once added: an older server just doesn't list a newer one.
+- [Constants for server feature names and upload file types](https://github.com/SACGF/variantgrid_api/issues/22) - new `str` enums `ServerFeature` (the server's `API_FEATURES`) and `UploadFileType` (the server's client-uploadable `UploadedFileTypes` names, lower case - checked against variantgrid.com's `api/v1/capabilities`), in `variantgrid_api.data_models`. Pass them to `supports()`, `accepts_upload()` and `upload_file(file_type=...)` so a typo is an `AttributeError` instead of a silently skipped call. They subclass `str`, so plain strings keep working, and they format as their value in messages. Names are kept once added: an older server just doesn't list a newer one.
 
 ### Changed
 
