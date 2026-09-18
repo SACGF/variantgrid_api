@@ -6,7 +6,8 @@ import logging
 import pytest
 import responses
 
-from variantgrid_api.api_client import VariantGridAPI, DateTimeEncoder
+from variantgrid_api.api_client import VariantGridAPI, DateTimeEncoder, EmptyInputPolicy
+from variantgrid_api.data_models import BamFile, SingleSampleVCF
 
 
 def _last_json():
@@ -65,6 +66,33 @@ def test_create_sequencing_data_fastq_r2_without_r1_raises(api, vg_objects):
     sf = dataclasses.replace(vg_objects["sequencing_files"][0], fastq_r1=None)
     with pytest.raises(ValueError):
         api.create_sequencing_data(vg_objects["sample_sheet_lookup"], [sf])
+
+@pytest.mark.parametrize("field, value", [
+    ("vcf_file", None),
+    ("vcf_file", SingleSampleVCF(path=None)),
+    ("vcf_file", SingleSampleVCF(path="")),
+    ("bam_file", None),
+    ("bam_file", BamFile(path=None)),
+])
+@responses.activate
+def test_create_sequencing_data_missing_path_names_record(api, vg_objects, field, value):
+    """ SACGF/variantgrid_api#23 - caught before sending, naming the record, rather than a 400 for the batch """
+    sequencing_files = list(vg_objects["sequencing_files"])
+    sequencing_files[1] = dataclasses.replace(sequencing_files[1], **{field: value})
+    with pytest.raises(ValueError, match=f"SequencingFile 'fake_sample_2' {field}.path"):
+        api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+    assert len(responses.calls) == 0
+
+@responses.activate
+def test_create_sequencing_data_missing_vcf_path_warns_and_posts(server, api_token, vg_objects, caplog):
+    api = VariantGridAPI(server, api_token, empty_input_policy=EmptyInputPolicy.WARN)
+    url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
+    responses.add(responses.POST, url, json={"created": 2}, status=200)
+    sequencing_files = list(vg_objects["sequencing_files"])
+    sequencing_files[0] = dataclasses.replace(sequencing_files[0], vcf_file=SingleSampleVCF(path=None))
+    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+    assert len(responses.calls) == 1
+    assert any("SequencingFile 'fake_sample_1' vcf_file.path" in r.message for r in caplog.records)
 
 def assert_post(api_call, url):
     responses.add(responses.POST, url, json={"ok": True}, status=200)

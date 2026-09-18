@@ -7,6 +7,7 @@
 ### Changed
 
 - The client, `MockVariantGridAPI` (including its default capabilities) and `examples/example_tso500.py` use the new enums internally. Behaviour is unchanged.
+- [`create_sequencing_data()` checks each record's paths](https://github.com/SACGF/variantgrid_api/issues/23) - a `SequencingFile` whose `vcf_file` or `bam_file` is missing or has no `path` is reported through `EmptyInputPolicy`, naming the record (`SequencingFile '<sample_name>' vcf_file.path: is None`). Under the default ERROR policy this raises `ValueError` before anything is sent; before, the server rejected the whole batch with a 400 that didn't say which record was at fault.
 
 ## [1.5.0] - 2026-09-17
 

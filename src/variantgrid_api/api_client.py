@@ -241,6 +241,9 @@ class VariantGridAPI:
         self._validate_list("sequencing_files", sequencing_files)
         records = []
         for sf in sequencing_files:
+            # The server requires both paths - catch it here, naming the record, rather than a 400 for the batch
+            self._validate_string(f"SequencingFile '{sf.sample_name}' bam_file.path", sf.bam_file and sf.bam_file.path)
+            self._validate_string(f"SequencingFile '{sf.sample_name}' vcf_file.path", sf.vcf_file and sf.vcf_file.path)
             data = sf.to_dict()
             # put into hierarchial JSON DRF expects
             fastq_r1 = data.pop("fastq_r1", None)
