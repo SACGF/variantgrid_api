@@ -494,6 +494,7 @@ class UploadFileType(_ServerName):
     BED = "bed"
     DRAGEN_TSO500_ALL_FUSIONS = "dragen_tso500_all_fusions"
     DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT = "dragen_tso500_combined_variant_output"
+    DRAGEN_TSO500_METRICS_OUTPUT = "dragen_tso500_metrics_output"
     GENE_COVERAGE = "gene_coverage"
     GENE_LIST = "gene_list"
     GENE_LEVEL_CNV_VCF = "gene_level_cnv_vcf"

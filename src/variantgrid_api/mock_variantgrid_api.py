@@ -30,6 +30,7 @@ MOCK_CAPABILITIES = ServerCapabilities(
     upload_file_types=frozenset({UploadFileType.VCF, UploadFileType.GENE_COVERAGE,
                                  UploadFileType.DRAGEN_TSO500_ALL_FUSIONS,
                                  UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT,
+                                 UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT,
                                  UploadFileType.GENE_LEVEL_CNV_VCF}),
 )
 

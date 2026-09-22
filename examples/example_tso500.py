@@ -5,7 +5,8 @@
     2. Post the sequencing run and sample sheet as usual
     3. Link each arm's sequencing sample to its extraction - one call per arm
     4. Upload the DNA arm's VCFs and the RNA arm's files, naming the extraction and build in upload metadata.
-       The CombinedVariantOutput.tsv goes up if the server accepts it, otherwise the RNA arm's splice VCF
+       The CombinedVariantOutput.tsv goes up if the server accepts it, otherwise the RNA arm's splice VCF.
+       The MetricsOutput.tsv (library QC) goes up if the server accepts it
     5. Post the specimen's TMB / MSI / GIS, transcribed from CombinedVariantOutput.tsv
 
     Ordering is forgiving: a link or upload naming an extraction the server doesn't have yet is parked and
@@ -145,6 +146,7 @@ def test_api(server, api_token, step=None):
     }
 
     cvo_filename = os.path.join(data_dir, "ExampleSample_2600000001_CombinedVariantOutput.tsv")
+    metrics_output_filename = os.path.join(data_dir, "ExampleSample_2600000001_MetricsOutput.tsv")
     specimen_measures = get_specimen_measures(cvo_filename, dna_reference)
 
     #########################
@@ -161,6 +163,8 @@ def test_api(server, api_token, step=None):
         uploads["combined_variant_output"] = (cvo_filename, {"genome_build": "GRCh37"})
     else:
         uploads["splice_variants"] = (f"{rna_prefix}_SpliceVariants.vcf", {"extraction": rna_reference})
+    # Library QC. No metadata - the file has no coordinates, so a genome_build is a 400 (unlike the CVO)
+    uploads["metrics_output"] = (metrics_output_filename, None)
 
     API_STEPS = {
         # 1. Accessioning - a specimen needs its patient, an extraction its specimen
@@ -178,9 +182,14 @@ def test_api(server, api_token, step=None):
         "link_dna_extraction": lambda: vg_api.link_sequencing_sample_extraction(dna_sequencing_sample, dna_reference),
         "link_rna_extraction": lambda: vg_api.link_sequencing_sample_extraction(rna_sequencing_sample, rna_reference),
     }
+    # Not VCFs - upload_file only sends these if the server accepts that file type (SKIP logs otherwise)
+    UPLOAD_FILE_TYPES = {
+        "combined_variant_output": UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT,
+        "metrics_output": UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT,
+    }
     # 4. Uploads. path=None as these aren't registered SeqAuto VCFs - the metadata names the extraction instead
     for name, (filename, metadata) in uploads.items():
-        file_type = UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT if name == "combined_variant_output" else None
+        file_type = UPLOAD_FILE_TYPES.get(name)
         API_STEPS[f"upload_{name}"] = lambda f=filename, m=metadata, t=file_type: vg_api.upload_file(
             f, path=None, metadata=m, file_type=t)
     # 5. Measures describe the specimen; the DNA arm produced them

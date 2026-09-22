@@ -1,3 +1,11 @@
+## [1.8.0] - Unreleased
+
+### Added
+
+- [`UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT`](https://github.com/SACGF/variantgrid_api/issues/24) (`"dragen_tso500_metrics_output"`) - DRAGEN TSO 500's `MetricsOutput.tsv`, the per-library QC (analysis status and each DNA/RNA library metric with its LSL/USL guideline) written beside the pair's CombinedVariantOutput (SACGF/variantgrid_sapath#455). Pass it as `upload_file(file_type=...)`, with `path=None` and no metadata: the file has no coordinates, so the server rejects a `genome_build` with a 400 (unlike the CVO, which requires one). The upload needs a server whose `api/v1/capabilities` lists the type (the matching SACGF/variantgrid importer); an older server skips it under `UnsupportedFeaturePolicy.SKIP`. No new method or `ServerFeature`.
+- `MockVariantGridAPI`'s default capabilities accept it, and `examples/example_tso500.py` uploads it when the server accepts it.
+- `tests/test_data/tso500/ExampleSample_2600000001/ExampleSample_2600000001_MetricsOutput.tsv`, the synthetic fixture from SACGF/variantgrid, with its README notes.
+
 ## [1.7.0] - 2026-09-18
 
 ### Added

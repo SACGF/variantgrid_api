@@ -31,7 +31,8 @@ def capabilities_json():
         "features": ["patients", "specimen_measures", "link_extraction", "upload_status",
                      "joint_called_vcf_cross_run", "upload_metadata"],
         "upload_file_types": ["vcf", "gene_coverage", "dragen_tso500_all_fusions",
-                              "dragen_tso500_combined_variant_output", "gene_level_cnv_vcf"],
+                              "dragen_tso500_combined_variant_output", "dragen_tso500_metrics_output",
+                              "gene_level_cnv_vcf"],
     }
 
 @pytest.fixture

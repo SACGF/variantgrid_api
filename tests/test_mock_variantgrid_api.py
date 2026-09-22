@@ -245,6 +245,7 @@ def test_mock_default_capabilities_accept_enums(mock_api):
     assert mock_api.supports("upload_status")
     assert mock_api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
     assert not mock_api.accepts_upload(UploadFileType.PED)
+    assert mock_api.accepts_upload(UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT)
     mock_api.upload_file("cvo.tsv", path=None, file_type=UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
     mock_api.assert_called_once("upload_file")
 

@@ -60,12 +60,15 @@ def test_capabilities_accept_enums(api, capabilities_url, capabilities_json):
 
     assert all(api.supports(feature) for feature in ServerFeature)
     assert api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
+    assert api.accepts_upload(UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT)
     assert not api.accepts_upload(UploadFileType.GENE_LIST)
 
 
 def test_enums_are_their_server_names():
     assert ServerFeature.PATIENTS == "patients"
     assert str(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT) == CVO
+    # SACGF/variantgrid_api#24 - the server's UploadedFileTypes.DRAGEN_TSO500_METRICS_OUTPUT in lower case
+    assert str(UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT) == "dragen_tso500_metrics_output"
     assert f"'{ServerFeature.UPLOAD_METADATA}'" == "'upload_metadata'"
     for enum_class in (ServerFeature, UploadFileType):
         for member in enum_class:
