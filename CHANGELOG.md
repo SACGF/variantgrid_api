@@ -1,3 +1,33 @@
+## [1.9.0] - 2026-10-07
+
+### Added
+
+- [`vg_api annotate_vcf --verbose`](https://github.com/SACGF/variantgrid_api/issues/25) (`-v`) - logs each request and response, and the full upload status JSON on the pending and error paths, to stderr.
+- [`AlignmentFile` and `SequencingFile.alignment_files`](https://github.com/SACGF/variantgrid_api/issues/27) - a sequencing sample's BAMs and CRAMs, eg a BAM and its recalibrated BAM, or a BAM plus a CRAM (the server's `AlignmentFile`, SACGF/variantgrid#2102). `AlignmentFile(path, aligner=None, file_type=None)`: `file_type` is an `AlignmentFileType` (`BAM` / `CRAM`), sent only when set; `get_file_type()` infers it from the path (`.cram` is a CRAM) as the server does. `SequencingFile.get_alignment_files()` gives the deprecated `bam_file` (if set) then `alignment_files`.
+  - `create_sequencing_data()` sends `alignment_files: [{path, aligner?, file_type?}]` on each record when the server reports the new `alignment_files` feature (SACGF/variantgrid#2105). Against an older server it falls back to one record per alignment file under `bam_file` (as the server already copes with today), without `file_type`; a CRAM there also needs `cram_alignment_files`, otherwise `unsupported_feature_policy` applies (ERROR raises `UnsupportedFeatureError`, SKIP leaves the CRAM out and sends the rest). Using `alignment_files` asks the server for its capabilities; records using only `bam_file` don't.
+  - `QC.alignment_files` - the sample's alignment files, sent as `qc.alignment_files: [{path, ...}]` to a server with `alignment_files`. An older server takes a single `bam_file`, so it gets the first alignment file (the one the VCF was called from) - enough, as it finds the QC by sequencing sample, VCF path and that path. `QC.get_alignment_files()` gives the deprecated `bam_file` (if set) then `alignment_files`.
+  - `ServerFeature.CRAM_ALIGNMENT_FILES` (`"cram_alignment_files"`, already reported by servers that store a `bam_file` ending `.cram` as a CRAM) and `ServerFeature.ALIGNMENT_FILES` (`"alignment_files"`).
+  - `MockVariantGridAPI.create_sequencing_data()` applies the same CRAM gating; its default capabilities include both features.
+  - `examples/` and `tests/conftest.py` use `AlignmentFile`, `SequencingFile.alignment_files` and `QC.alignment_files`.
+- [`UploadFileType.GENE_LEVEL_SPLICE_VCF`](https://github.com/SACGF/variantgrid_api/issues/30) (`"gene_level_splice_vcf"`) - SpliceGirl's TSO 500 `SpliceVariants.vcf`, imported as gene-level splice variants by a server at or after SACGF/variantgrid#1903. `examples/example_tso500.py` uses it to tell whether the server takes the splice calls from that VCF or (older servers) from the CombinedVariantOutput.
+
+### Changed
+
+- [`vg_api annotate_vcf` says why a file isn't ready](https://github.com/SACGF/variantgrid_api/issues/25) - the pending message names the gate that hasn't passed, from the upload status (`pipeline_status`, `import_status` / `progress_percent`, `remaining_annotation_runs`, `annotation_complete`, `downloads_available`), eg `not ready yet - pipeline Success, import 100.0%, 2 annotation runs remaining`. Before, it showed only the import progress, which reads 100% while annotation is still running. Exit codes are unchanged.
+- [DRAGEN TSO 500 run-level uploads take `sequencing_run` metadata](https://github.com/SACGF/variantgrid_api/issues/30) - documented in the README, in `upload_file()` and on `UploadFileType`. `DRAGEN_TSO500_METRICS_OUTPUT` requires it. For `DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT` the file names its run 'NA', so the server takes the run from this metadata; without it, it uses the registered run whose current sample sheet names the pair's sample IDs, and the import fails if there's none (SACGF/variantgrid#1904). It's the only metadata either file takes - a current server rejects `genome_build` on a CombinedVariantOutput.
+- `examples/example_tso500.py` no longer parses TMB / MSI / GIS out of the CombinedVariantOutput and posts them as specimen measures. It uploads the CombinedVariantOutput and MetricsOutput with `sequencing_run` metadata, and the splice VCF whenever the server has a splice VCF importer.
+- README: SeqAuto writes (the sequencing `create_*` calls, the QC calls and `link_sequencing_sample_extraction`) need a superuser, or a member of the server's SeqAuto write group (`seqauto_api_write` by default), otherwise the server returns 403. Reads are unchanged.
+
+### Deprecated
+
+- `BamFile` - use `AlignmentFile`. It is now a subclass of `AlignmentFile` that warns (`DeprecationWarning`) and serialises the same.
+- `SequencingFile.bam_file` - use `alignment_files`. It still works: it is now optional (keeping its position, so positional construction is unchanged), setting it warns, and a record using only `bam_file` sends exactly the JSON 1.8.0 sent. Setting both sends the `bam_file` first in `alignment_files` (or as its own record to an older server).
+- `QC.bam_file` - use `alignment_files`. It still works, warns, and a QC using only `bam_file` sends the same JSON as before; positional `QC(lookup, bam_file, vcf_file)` still works. Setting both sends `bam_file` first in `alignment_files`. `QC.vcf_file` now has a default (`None`) only so the new field can follow it - it is still required by the server.
+
+### Removed
+
+- [Specimen measures](https://github.com/SACGF/variantgrid_api/issues/30) - `VariantGridAPI.create_specimen_measure()` / `create_specimen_measures()` (and on `MockVariantGridAPI`), `SpecimenMeasure`, `SpecimenMeasureType` and `ServerFeature.SPECIMEN_MEASURES`. The server removed them (SACGF/variantgrid#1904) - TMB / MSI / GIS now come from the uploaded CombinedVariantOutput - so no server reports `specimen_measures` and the calls could only skip or raise. Removed without a deprecation period as nothing uses them.
+
 ## [1.8.0] - 2026-09-22
 
 ### Added
