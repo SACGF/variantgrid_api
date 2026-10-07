@@ -200,20 +200,6 @@ class MockVariantGridAPI:
         self._record("create_extraction", extraction)
         return self._ret("create_extraction", {"id": 1, **extraction.to_dict()})
 
-    def create_specimen_measure(self, specimen_reference, measure):
-        if not self._require(ServerFeature.SPECIMEN_MEASURES):
-            return None
-        self._record("create_specimen_measure", specimen_reference, measure)
-        return self._ret("create_specimen_measure", {"id": 1, "specimen": reference_json(specimen_reference),
-                                                     **measure.to_dict()})
-
-    def create_specimen_measures(self, specimen_reference, measures):
-        if not self._require(ServerFeature.SPECIMEN_MEASURES):
-            return None
-        self._record("create_specimen_measures", specimen_reference, measures)
-        return self._ret("create_specimen_measures", {"specimen": reference_json(specimen_reference),
-                                                      "measures": [m.to_dict() for m in measures]})
-
     def link_sequencing_sample_extraction(self, sequencing_sample_lookup, extraction_reference):
         if not self._require(ServerFeature.LINK_EXTRACTION):
             return None

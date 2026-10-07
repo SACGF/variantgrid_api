@@ -13,7 +13,7 @@ import requests
 
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, JointCalledVCF, \
     SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer, \
-    SequencingSampleLookup, Patient, Specimen, Extraction, SpecimenMeasure, ExternalReference, ReferenceLike, \
+    SequencingSampleLookup, Patient, Specimen, Extraction, ExternalReference, ReferenceLike, \
     reference_json, ServerCapabilities, ServerFeature, UploadFileType
 
 
@@ -346,27 +346,6 @@ class VariantGridAPI:
         self._validate_object("extraction", extraction)
         return self._post("patients/api/v1/extraction/", extraction.to_dict())
 
-    def create_specimen_measure(self, specimen_reference: ReferenceLike, measure: SpecimenMeasure):
-        """ An unknown specimen is a 400. Replaces any existing measure of the same type for the specimen """
-        if not self._require(ServerFeature.SPECIMEN_MEASURES):
-            return None
-        self._validate_reference("specimen_reference", specimen_reference)
-        self._validate_object("measure", measure)
-        json_data = {"specimen": reference_json(specimen_reference), **measure.to_dict()}
-        return self._post("patients/api/v1/specimen_measure/", json_data)
-
-    def create_specimen_measures(self, specimen_reference: ReferenceLike, measures: List[SpecimenMeasure]):
-        """ A run's measures (TMB, MSI, GIS etc) against one specimen in one call """
-        if not self._require(ServerFeature.SPECIMEN_MEASURES):
-            return None
-        self._validate_reference("specimen_reference", specimen_reference)
-        self._validate_list("measures", measures)
-        json_data = {
-            "specimen": reference_json(specimen_reference),
-            "measures": [measure.to_dict() for measure in measures],
-        }
-        return self._post("patients/api/v1/specimen_measure/bulk_create", json_data)
-
     def link_sequencing_sample_extraction(self, sequencing_sample_lookup: SequencingSampleLookup,
                                           extraction_reference: ReferenceLike) -> Optional[dict]:
         """ Name the extraction a sequencing sample was made from. One call per sequencing sample is
@@ -407,6 +386,10 @@ class VariantGridAPI:
                   'sample_extractions' - {vcf_sample_name: reference} for a multi-sample VCF
                   Send 'extraction' or 'sample_extractions', not both. An unknown key is a 400. An extraction
                   the server doesn't have yet is not - it attaches once the extraction is created.
+                  A run-level DRAGEN TSO 500 file takes only 'sequencing_run' (the run's name): required for a
+                  MetricsOutput.tsv, and for a CombinedVariantOutput.tsv the run it belongs to - otherwise the
+                  server uses the registered run whose current sample sheet names the pair's sample IDs, and the
+                  import fails if there's none (SACGF/variantgrid#1904).
                   Needs the server feature 'upload_metadata'. Without it, SKIP uploads the file without the
                   metadata (as older clients did) rather than not at all, and ERROR raises
 

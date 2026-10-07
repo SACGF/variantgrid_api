@@ -134,13 +134,10 @@ def test_ungated_method_makes_no_capabilities_request(api, server, capabilities_
 # ------------------------------------------------------------------ #
 
 def _gated_calls(vg_objects, vcf):
-    measure = vg_objects["specimen_measures"][0]
     return {
         "create_patient": lambda api: api.create_patient(vg_objects["patient"]),
         "create_specimen": lambda api: api.create_specimen(vg_objects["specimen"]),
         "create_extraction": lambda api: api.create_extraction(vg_objects["dna_extraction"]),
-        "create_specimen_measure": lambda api: api.create_specimen_measure("2600000001", measure),
-        "create_specimen_measures": lambda api: api.create_specimen_measures("2600000001", [measure]),
         "link_sequencing_sample_extraction": lambda api: api.link_sequencing_sample_extraction(
             vg_objects["sequencing_sample_lookup_1"], "2600000001C"),
         "upload_file_file_type": lambda api: api.upload_file(vcf, path=None, file_type=CVO),
@@ -151,8 +148,8 @@ def _gated_calls(vg_objects, vcf):
     }
 
 
-GATED = ["create_patient", "create_specimen", "create_extraction", "create_specimen_measure",
-         "create_specimen_measures", "link_sequencing_sample_extraction", "upload_file_file_type",
+GATED = ["create_patient", "create_specimen", "create_extraction", "link_sequencing_sample_extraction",
+         "upload_file_file_type",
          "poll_upload_status", "wait_for_annotation", "download_annotated", "annotate_vcf"]
 
 

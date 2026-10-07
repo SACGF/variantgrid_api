@@ -9,8 +9,8 @@ from variantgrid_api.data_models import (
     EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, SampleSheet,
     JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile,
     SequencingFile, SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer,
-    Patient, Specimen, Extraction, SpecimenMeasure, ExternalPK, ExternalReference, Sex, TissueStatus, NucleicAcid,
-    SpecimenMeasureType, ServerCapabilities
+    Patient, Specimen, Extraction, ExternalPK, ExternalReference, Sex, TissueStatus, NucleicAcid,
+    ServerCapabilities
 )
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def capabilities_json():
     return {
         "version": "4.0.0",
         "git_hash": "2130cffe0",
-        "features": ["patients", "specimen_measures", "link_extraction", "upload_status",
+        "features": ["patients", "link_extraction", "upload_status",
                      "joint_called_vcf_cross_run", "upload_metadata"],
         "upload_file_types": ["vcf", "gene_coverage", "dragen_tso500_all_fusions",
                               "dragen_tso500_combined_variant_output", "dragen_tso500_metrics_output",
@@ -194,13 +194,6 @@ def vg_objects(data_dir):
                                 nucleic_acid_source=NucleicAcid.DNA)
     rna_extraction = Extraction(specimen="2600000001", reference_id="2600000001B",
                                 nucleic_acid_source=NucleicAcid.RNA)
-    specimen_measures = [
-        SpecimenMeasure(measure_type=SpecimenMeasureType.TMB, value=7.1, unit="mut/Mb",
-                        method="DRAGEN TSO500 2.1.1", extraction="2600000001C",
-                        source_payload={"Total TMB": "7.1", "Coding Region Size in Megabases": "1.27"}),
-        SpecimenMeasure(measure_type=SpecimenMeasureType.MSI, value=2.48, unit="%", call="Stable",
-                        threshold=">= 20.00%", threshold_source="Illumina"),
-    ]
     sequencing_sample_lookup_1 = SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup,
                                                         sample_name="fake_sample_1")
 
@@ -227,6 +220,5 @@ def vg_objects(data_dir):
         specimen=specimen,
         dna_extraction=dna_extraction,
         rna_extraction=rna_extraction,
-        specimen_measures=specimen_measures,
         sequencing_sample_lookup_1=sequencing_sample_lookup_1,
     )

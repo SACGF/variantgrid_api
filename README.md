@@ -52,8 +52,8 @@ submit-now/download-later pattern, and all the options.
 
 ## Patients, specimens and extractions
 
-VariantGrid can record which patient, specimen and extraction a lab's sequencing came from, and specimen-level
-measures such as TMB, MSI and GIS. This needs a server at or after SACGF/variantgrid#1716.
+VariantGrid can record which patient, specimen and extraction a lab's sequencing came from. This needs a server
+at or after SACGF/variantgrid#1716.
 
 ```
 from variantgrid_api.data_models import Patient, Specimen, Extraction, ExternalReference, NucleicAcid
@@ -96,6 +96,37 @@ api.upload_file("sample_CombinedVariantOutput.tsv", path=None,
 Where the fallback isn't simply "do nothing", branch on `api.supports("feature")` or
 `api.accepts_upload("file_type")`. `api.capabilities.version` is useful for logging which server you reached.
 For tests, `MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY)` behaves like an old server.
+
+## DRAGEN TSO 500 run-level files
+
+A TSO 500 run's `CombinedVariantOutput.tsv` (the pair's TMB / MSI / GIS) and `MetricsOutput.tsv` (library QC)
+are uploaded with the run's name as `sequencing_run` metadata, the only metadata they take:
+
+```
+from variantgrid_api.data_models import UploadFileType
+
+api.upload_file("ExampleSample_CombinedVariantOutput.tsv", path=None,
+                metadata={"sequencing_run": sequencing_run.name},
+                file_type=UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
+api.upload_file("MetricsOutput.tsv", path=None, metadata={"sequencing_run": sequencing_run.name},
+                file_type=UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT)
+```
+
+- **MetricsOutput** requires `sequencing_run` - the file never names its run.
+- **CombinedVariantOutput** names its run 'NA', so the server takes the run from `sequencing_run`. Without it,
+  the server uses the registered run whose current sample sheet names the pair's sample IDs, and if no registered
+  run names the pair the import fails. Register the run and sample sheet first, and send `sequencing_run` anyway.
+
+The server reads TMB / MSI / GIS from the CombinedVariantOutput (SACGF/variantgrid#1904), which replaced
+specimen measures. See `examples/example_tso500.py` for a full run.
+
+## Permission to write sequencing data
+
+Posts to the server's `seqauto/api/` endpoints - the sequencing `create_*` calls from `create_experiment` through
+`create_sequencing_data` and the QC calls, and `link_sequencing_sample_extraction` - need a superuser's API token,
+or one belonging to a member of the server's SeqAuto write group (`seqauto_api_write` unless the server's
+`SEQAUTO_API_WRITE_GROUP` setting says otherwise). Anyone else gets a 403 (`requests.HTTPError`). Reads, such as
+`sequencing_run_has_vcf()`, need only a valid token.
 
 ## Testing
 
