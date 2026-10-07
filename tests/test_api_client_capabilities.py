@@ -58,7 +58,8 @@ def test_capabilities_accept_enums(api, capabilities_url, capabilities_json):
     """ SACGF/variantgrid_api#22 - the enums are str, so they match the plain names the server sends """
     responses.add(responses.GET, capabilities_url, json=capabilities_json, status=200)
 
-    assert all(api.supports(feature) for feature in ServerFeature)
+    with pytest.warns(DeprecationWarning, match="Server feature 'specimen_measures' is deprecated"):
+        assert all(api.supports(feature) for feature in ServerFeature)
     assert api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
     assert api.accepts_upload(UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT)
     assert not api.accepts_upload(UploadFileType.GENE_LIST)
@@ -157,6 +158,7 @@ GATED = ["create_patient", "create_specimen", "create_extraction", "create_speci
 
 
 @pytest.mark.parametrize("method", GATED)
+@pytest.mark.filterwarnings("ignore:create_specimen_measure:DeprecationWarning")
 @responses.activate
 def test_gated_method_raises_on_legacy_under_error(api, capabilities_url, vg_objects, vcf, method):
     responses.add(responses.GET, capabilities_url, status=404)
@@ -168,6 +170,7 @@ def test_gated_method_raises_on_legacy_under_error(api, capabilities_url, vg_obj
 
 
 @pytest.mark.parametrize("method", GATED)
+@pytest.mark.filterwarnings("ignore:create_specimen_measure:DeprecationWarning")
 @responses.activate
 def test_gated_method_skips_on_legacy_under_skip(skip_api, capabilities_url, vg_objects, vcf, method, caplog):
     responses.add(responses.GET, capabilities_url, status=404)

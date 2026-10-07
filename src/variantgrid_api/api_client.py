@@ -14,7 +14,8 @@ import requests
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, JointCalledVCF, \
     SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer, \
     SequencingSampleLookup, Patient, Specimen, Extraction, SpecimenMeasure, ExternalReference, ReferenceLike, \
-    reference_json, ServerCapabilities, ServerFeature, UploadFileType
+    reference_json, ServerCapabilities, ServerFeature, UploadFileType, DEPRECATED_SERVER_FEATURES, \
+    SPECIMEN_MEASURES_DEPRECATION
 
 
 _UNSET = object()
@@ -162,6 +163,9 @@ class VariantGridAPI:
         return self._capabilities
 
     def supports(self, feature: Union[ServerFeature, str]) -> bool:
+        """ Warns (DeprecationWarning) for a feature in DEPRECATED_SERVER_FEATURES, but still answers """
+        if message := DEPRECATED_SERVER_FEATURES.get(feature):
+            warnings.warn(f"Server feature '{feature}' is deprecated: {message}", DeprecationWarning, stacklevel=2)
         return feature in self.capabilities.features
 
     def accepts_upload(self, file_type: Union[UploadFileType, str]) -> bool:
@@ -179,7 +183,7 @@ class VariantGridAPI:
 
     def _require(self, feature: Union[ServerFeature, str]) -> bool:
         """ True if the server supports feature, otherwise applies unsupported_feature_policy """
-        return self.supports(feature) or self._unsupported(f"server doesn't support feature '{feature}'")
+        return feature in self.capabilities.features or self._unsupported(f"server doesn't support feature '{feature}'")
 
     def _require_upload(self, file_type: Union[UploadFileType, str]) -> bool:
         return self.accepts_upload(file_type) or self._unsupported(f"server doesn't accept upload file type '{file_type}'")
@@ -347,7 +351,11 @@ class VariantGridAPI:
         return self._post("patients/api/v1/extraction/", extraction.to_dict())
 
     def create_specimen_measure(self, specimen_reference: ReferenceLike, measure: SpecimenMeasure):
-        """ An unknown specimen is a 400. Replaces any existing measure of the same type for the specimen """
+        """ Deprecated - a current server has no specimen measures (see SPECIMEN_MEASURES_DEPRECATION). Still
+            posts to an older server that reports 'specimen_measures'.
+            An unknown specimen is a 400. Replaces any existing measure of the same type for the specimen """
+        warnings.warn(f"create_specimen_measure is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
+                      DeprecationWarning, stacklevel=2)
         if not self._require(ServerFeature.SPECIMEN_MEASURES):
             return None
         self._validate_reference("specimen_reference", specimen_reference)
@@ -356,7 +364,11 @@ class VariantGridAPI:
         return self._post("patients/api/v1/specimen_measure/", json_data)
 
     def create_specimen_measures(self, specimen_reference: ReferenceLike, measures: List[SpecimenMeasure]):
-        """ A run's measures (TMB, MSI, GIS etc) against one specimen in one call """
+        """ Deprecated - a current server has no specimen measures (see SPECIMEN_MEASURES_DEPRECATION). Still
+            posts to an older server that reports 'specimen_measures'.
+            A run's measures (TMB, MSI, GIS etc) against one specimen in one call """
+        warnings.warn(f"create_specimen_measures is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
+                      DeprecationWarning, stacklevel=2)
         if not self._require(ServerFeature.SPECIMEN_MEASURES):
             return None
         self._validate_reference("specimen_reference", specimen_reference)
@@ -407,6 +419,10 @@ class VariantGridAPI:
                   'sample_extractions' - {vcf_sample_name: reference} for a multi-sample VCF
                   Send 'extraction' or 'sample_extractions', not both. An unknown key is a 400. An extraction
                   the server doesn't have yet is not - it attaches once the extraction is created.
+                  A run-level DRAGEN TSO 500 file takes only 'sequencing_run' (the run's name): required for a
+                  MetricsOutput.tsv, and for a CombinedVariantOutput.tsv the run it belongs to - otherwise the
+                  server uses the registered run whose current sample sheet names the pair's sample IDs, and the
+                  import fails if there's none (SACGF/variantgrid#1904).
                   Needs the server feature 'upload_metadata'. Without it, SKIP uploads the file without the
                   metadata (as older clients did) rather than not at all, and ERROR raises
 

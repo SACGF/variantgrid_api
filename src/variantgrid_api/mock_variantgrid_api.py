@@ -19,11 +19,13 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
 
 from variantgrid_api.api_client import UnsupportedFeaturePolicy, UnsupportedFeatureError
-from variantgrid_api.data_models import reference_json, ServerCapabilities, ServerFeature, UploadFileType
+from variantgrid_api.data_models import reference_json, ServerCapabilities, ServerFeature, UploadFileType, \
+    DEPRECATED_SERVER_FEATURES, SPECIMEN_MEASURES_DEPRECATION
 
 _UNSET = object()
 
-# Every feature and upload file type the real client gates on - the shape of a current (VG4) server
+# Every feature and upload file type the real client gates on - the shape of a current (VG4) server, plus the
+# deprecated 'specimen_measures' so the deprecated calls still record
 MOCK_CAPABILITIES = ServerCapabilities(
     version="mock",
     features=frozenset(ServerFeature),
@@ -89,6 +91,8 @@ class MockVariantGridAPI:
     # ------------------------------------------------------------------ #
 
     def supports(self, feature: Union[ServerFeature, str]) -> bool:
+        if message := DEPRECATED_SERVER_FEATURES.get(feature):
+            warnings.warn(f"Server feature '{feature}' is deprecated: {message}", DeprecationWarning, stacklevel=2)
         return feature in self.capabilities.features
 
     def accepts_upload(self, file_type: Union[UploadFileType, str]) -> bool:
@@ -102,7 +106,7 @@ class MockVariantGridAPI:
         raise UnsupportedFeatureError(message, self.capabilities)
 
     def _require(self, feature: Union[ServerFeature, str]) -> bool:
-        return self.supports(feature) or self._unsupported(f"server doesn't support feature '{feature}'")
+        return feature in self.capabilities.features or self._unsupported(f"server doesn't support feature '{feature}'")
 
     def _require_upload(self, file_type: Union[UploadFileType, str]) -> bool:
         return self.accepts_upload(file_type) or self._unsupported(f"server doesn't accept upload file type '{file_type}'")
@@ -201,6 +205,8 @@ class MockVariantGridAPI:
         return self._ret("create_extraction", {"id": 1, **extraction.to_dict()})
 
     def create_specimen_measure(self, specimen_reference, measure):
+        warnings.warn(f"create_specimen_measure is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
+                      DeprecationWarning, stacklevel=2)
         if not self._require(ServerFeature.SPECIMEN_MEASURES):
             return None
         self._record("create_specimen_measure", specimen_reference, measure)
@@ -208,6 +214,8 @@ class MockVariantGridAPI:
                                                      **measure.to_dict()})
 
     def create_specimen_measures(self, specimen_reference, measures):
+        warnings.warn(f"create_specimen_measures is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
+                      DeprecationWarning, stacklevel=2)
         if not self._require(ServerFeature.SPECIMEN_MEASURES):
             return None
         self._record("create_specimen_measures", specimen_reference, measures)

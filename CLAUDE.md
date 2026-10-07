@@ -34,6 +34,7 @@ Gotchas:
 - `upload_file(path=...)` is a SeqAuto-only hint that links an upload to a registered VCF. It defaults to the filename for backwards compatibility, but ad-hoc uploads (the annotate flow) must pass `path=None`, or the server's import fails.
 - Blocking/polling methods take an injectable `sleep` so tests don't wait in real time.
 - Test VCFs sent to a real server need the full contig set in the header, or the server can't detect the genome build.
+- A server feature that's been removed stays in `ServerFeature` and goes in `DEPRECATED_SERVER_FEATURES`, so `supports()` warns when asked for it; `_require()` checks the capabilities directly, so the deprecated method gated on it warns only once. A wholly deprecated enum uses `_DeprecatedEnumMeta`, which warns when a member is named (`SpecimenMeasureType.TMB`) but not on a lookup by value (JSON decoding) (#30).
 
 ## Tests
 

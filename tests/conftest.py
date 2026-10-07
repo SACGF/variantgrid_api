@@ -194,13 +194,14 @@ def vg_objects(data_dir):
                                 nucleic_acid_source=NucleicAcid.DNA)
     rna_extraction = Extraction(specimen="2600000001", reference_id="2600000001B",
                                 nucleic_acid_source=NucleicAcid.RNA)
-    specimen_measures = [
-        SpecimenMeasure(measure_type=SpecimenMeasureType.TMB, value=7.1, unit="mut/Mb",
-                        method="DRAGEN TSO500 2.1.1", extraction="2600000001C",
-                        source_payload={"Total TMB": "7.1", "Coding Region Size in Megabases": "1.27"}),
-        SpecimenMeasure(measure_type=SpecimenMeasureType.MSI, value=2.48, unit="%", call="Stable",
-                        threshold=">= 20.00%", threshold_source="Illumina"),
-    ]
+    with pytest.warns(DeprecationWarning):  # SACGF/variantgrid_api#30 - for older servers only
+        specimen_measures = [
+            SpecimenMeasure(measure_type=SpecimenMeasureType.TMB, value=7.1, unit="mut/Mb",
+                            method="DRAGEN TSO500 2.1.1", extraction="2600000001C",
+                            source_payload={"Total TMB": "7.1", "Coding Region Size in Megabases": "1.27"}),
+            SpecimenMeasure(measure_type=SpecimenMeasureType.MSI, value=2.48, unit="%", call="Stable",
+                            threshold=">= 20.00%", threshold_source="Illumina"),
+        ]
     sequencing_sample_lookup_1 = SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup,
                                                         sample_name="fake_sample_1")
 

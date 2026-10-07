@@ -1,8 +1,10 @@
+import warnings
+
 import pytest
 
 from variantgrid_api.data_models import (
     SequencingRun, SampleSheetLookup, JointCalledVCF, SampleSheetCombinedVCFFile,
-    SingleSampleVCF, VCFFile, VariantCaller,
+    SingleSampleVCF, VCFFile, VariantCaller, SpecimenMeasure, SpecimenMeasureType,
 )
 
 def test_get_date_from_name(vg_objects):
@@ -40,3 +42,15 @@ def test_vcf_file_is_deprecated_alias():
     assert isinstance(obj, SingleSampleVCF)
     canonical = SingleSampleVCF(path="/data/sample.vcf.gz", variant_caller=variant_caller)
     assert obj.to_dict() == canonical.to_dict()
+
+
+def test_specimen_measure_and_type_are_deprecated():
+    """ SACGF/variantgrid_api#30 - both warn but still build the same JSON for an older server """
+    with pytest.warns(DeprecationWarning, match="SpecimenMeasureType is deprecated"):
+        measure_type = SpecimenMeasureType.TMB
+    with pytest.warns(DeprecationWarning, match="SpecimenMeasure is deprecated"):
+        measure = SpecimenMeasure(measure_type=measure_type, value=7.1)
+    assert measure.to_dict(encode_json=True) == {"measure_type": "T", "value": 7.1}
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert SpecimenMeasureType("T") is measure_type  # by value, as JSON decoding does
