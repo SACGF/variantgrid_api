@@ -13,9 +13,8 @@ import requests
 
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SampleSheet, JointCalledVCF, \
     SampleSheetLookup, SequencingFile, QCGeneList, QCExecStats, QCGeneCoverage, SequencerModel, Sequencer, \
-    SequencingSampleLookup, Patient, Specimen, Extraction, SpecimenMeasure, ExternalReference, ReferenceLike, \
-    reference_json, ServerCapabilities, ServerFeature, UploadFileType, DEPRECATED_SERVER_FEATURES, \
-    SPECIMEN_MEASURES_DEPRECATION
+    SequencingSampleLookup, Patient, Specimen, Extraction, ExternalReference, ReferenceLike, \
+    reference_json, ServerCapabilities, ServerFeature, UploadFileType
 
 
 _UNSET = object()
@@ -163,9 +162,6 @@ class VariantGridAPI:
         return self._capabilities
 
     def supports(self, feature: Union[ServerFeature, str]) -> bool:
-        """ Warns (DeprecationWarning) for a feature in DEPRECATED_SERVER_FEATURES, but still answers """
-        if message := DEPRECATED_SERVER_FEATURES.get(feature):
-            warnings.warn(f"Server feature '{feature}' is deprecated: {message}", DeprecationWarning, stacklevel=2)
         return feature in self.capabilities.features
 
     def accepts_upload(self, file_type: Union[UploadFileType, str]) -> bool:
@@ -183,7 +179,7 @@ class VariantGridAPI:
 
     def _require(self, feature: Union[ServerFeature, str]) -> bool:
         """ True if the server supports feature, otherwise applies unsupported_feature_policy """
-        return feature in self.capabilities.features or self._unsupported(f"server doesn't support feature '{feature}'")
+        return self.supports(feature) or self._unsupported(f"server doesn't support feature '{feature}'")
 
     def _require_upload(self, file_type: Union[UploadFileType, str]) -> bool:
         return self.accepts_upload(file_type) or self._unsupported(f"server doesn't accept upload file type '{file_type}'")
@@ -349,35 +345,6 @@ class VariantGridAPI:
             return None
         self._validate_object("extraction", extraction)
         return self._post("patients/api/v1/extraction/", extraction.to_dict())
-
-    def create_specimen_measure(self, specimen_reference: ReferenceLike, measure: SpecimenMeasure):
-        """ Deprecated - a current server has no specimen measures (see SPECIMEN_MEASURES_DEPRECATION). Still
-            posts to an older server that reports 'specimen_measures'.
-            An unknown specimen is a 400. Replaces any existing measure of the same type for the specimen """
-        warnings.warn(f"create_specimen_measure is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
-                      DeprecationWarning, stacklevel=2)
-        if not self._require(ServerFeature.SPECIMEN_MEASURES):
-            return None
-        self._validate_reference("specimen_reference", specimen_reference)
-        self._validate_object("measure", measure)
-        json_data = {"specimen": reference_json(specimen_reference), **measure.to_dict()}
-        return self._post("patients/api/v1/specimen_measure/", json_data)
-
-    def create_specimen_measures(self, specimen_reference: ReferenceLike, measures: List[SpecimenMeasure]):
-        """ Deprecated - a current server has no specimen measures (see SPECIMEN_MEASURES_DEPRECATION). Still
-            posts to an older server that reports 'specimen_measures'.
-            A run's measures (TMB, MSI, GIS etc) against one specimen in one call """
-        warnings.warn(f"create_specimen_measures is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
-                      DeprecationWarning, stacklevel=2)
-        if not self._require(ServerFeature.SPECIMEN_MEASURES):
-            return None
-        self._validate_reference("specimen_reference", specimen_reference)
-        self._validate_list("measures", measures)
-        json_data = {
-            "specimen": reference_json(specimen_reference),
-            "measures": [measure.to_dict() for measure in measures],
-        }
-        return self._post("patients/api/v1/specimen_measure/bulk_create", json_data)
 
     def link_sequencing_sample_extraction(self, sequencing_sample_lookup: SequencingSampleLookup,
                                           extraction_reference: ReferenceLike) -> Optional[dict]:

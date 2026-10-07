@@ -2,7 +2,7 @@ import re
 import warnings
 from datetime import date, datetime
 from dataclasses import dataclass, field
-from enum import Enum, EnumMeta
+from enum import Enum
 from typing import Optional, List, Union, FrozenSet, ClassVar
 
 from dataclasses_json import dataclass_json, config
@@ -314,33 +314,6 @@ class NucleicAcid(str, Enum):
     RNA = "R"
 
 
-# SACGF/variantgrid_api#30 - the server removed specimen measures (SACGF/variantgrid#1904)
-SPECIMEN_MEASURES_DEPRECATION = (
-    "the server no longer stores specimen measures - TMB, MSI and GIS come from the DRAGEN TSO 500 "
-    "CombinedVariantOutput, so upload that instead: upload_file(cvo_filename, path=None, "
-    "metadata={'sequencing_run': run_name}, file_type=UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)")
-
-
-class _DeprecatedEnumMeta(EnumMeta):
-    """ Warns (DeprecationWarning) when a member is named, eg SpecimenMeasureType.TMB. Looking one up by
-        value (SpecimenMeasureType("T"), as JSON decoding does) doesn't warn """
-
-    def __getattribute__(cls, name):
-        if not name.startswith("_") and name in type.__getattribute__(cls, "_member_map_"):
-            warnings.warn(f"{type.__getattribute__(cls, '__name__')} is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
-                          DeprecationWarning, stacklevel=2)
-        return super().__getattribute__(name)
-
-
-class SpecimenMeasureType(str, Enum, metaclass=_DeprecatedEnumMeta):
-    """ Deprecated - see SPECIMEN_MEASURES_DEPRECATION """
-    TMB = "T"              # Tumour mutational burden
-    MSI = "M"              # Microsatellite instability
-    GIS = "G"              # Genomic instability score
-    TUMOUR_FRACTION = "F"
-    PLOIDY = "P"
-
-
 def _exclude_none():
     return config(exclude=lambda x: x is None)
 
@@ -459,33 +432,6 @@ class Extraction:
     external_pk: Optional[ExternalPK] = field(default=None, metadata=_exclude_none())
 
 
-@dataclass_json
-@dataclass
-class SpecimenMeasure:
-    """ A scalar measured on the specimen rather than on any one variant - TMB, MSI, GIS etc (SACGF/variantgrid#1559)
-
-        Transcribe these from vendor output rather than computing them, and put the raw block they came
-        from in source_payload. Send both the score (value) and the lab's call, with the threshold that
-        turned one into the other - that threshold is lab policy, not vendor output.
-
-        The specimen is passed to create_specimen_measure(s) rather than held here. A re-post for the
-        same specimen and measure_type replaces the previous value. """
-    measure_type: SpecimenMeasureType
-    value: Optional[float] = field(default=None, metadata=_exclude_none())
-    unit: Optional[str] = field(default=None, metadata=_exclude_none())             # eg 'mut/Mb', '%'
-    call: Optional[str] = field(default=None, metadata=_exclude_none())             # eg 'High', 'Stable'
-    threshold: Optional[str] = field(default=None, metadata=_exclude_none())
-    threshold_source: Optional[str] = field(default=None, metadata=_exclude_none())  # whose policy set it
-    method: Optional[str] = field(default=None, metadata=_exclude_none())           # tool and version
-    source_payload: Optional[dict] = field(default=None, metadata=_exclude_none())
-    measured_date: Optional[datetime] = field(default=None, metadata=_exclude_none())
-    extraction: Optional[ReferenceLike] = _reference_field(default=None)  # the arm that produced it
-
-    def __post_init__(self):
-        warnings.warn(f"SpecimenMeasure is deprecated: {SPECIMEN_MEASURES_DEPRECATION}",
-                      DeprecationWarning, stacklevel=3)
-
-
 ############################################################
 ## Server capabilities (SACGF/variantgrid_api#22)
 
@@ -502,9 +448,8 @@ class _ServerName(str, Enum):
 
 class ServerFeature(_ServerName):
     """ Features a server reports in capabilities (API_FEATURES in the variantgrid repo's
-        variantgrid/views_rest.py). Names are never removed - an older server just doesn't list a newer one """
+        variantgrid/views_rest.py). An older server just doesn't list a newer one """
     PATIENTS = "patients"
-    SPECIMEN_MEASURES = "specimen_measures"  # Deprecated - removed by SACGF/variantgrid#1904, see DEPRECATED_SERVER_FEATURES
     LINK_EXTRACTION = "link_extraction"
     UPLOAD_STATUS = "upload_status"
     JOINT_CALLED_VCF_CROSS_RUN = "joint_called_vcf_cross_run"
@@ -531,13 +476,6 @@ class UploadFileType(_ServerName):
     PED = "ped"
     VCF = "vcf"
     VCF_INSERT_VARIANTS_ONLY = "vcf_insert_variants_only"
-
-
-# Features a current server no longer reports. The names stay so an older server can still be asked about them,
-# but supports() warns (DeprecationWarning) when asked for one
-DEPRECATED_SERVER_FEATURES = {
-    ServerFeature.SPECIMEN_MEASURES: SPECIMEN_MEASURES_DEPRECATION,
-}
 
 
 @dataclass(frozen=True)

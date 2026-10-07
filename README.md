@@ -117,11 +117,8 @@ api.upload_file("MetricsOutput.tsv", path=None, metadata={"sequencing_run": sequ
   the server uses the registered run whose current sample sheet names the pair's sample IDs, and if no registered
   run names the pair the import fails. Register the run and sample sheet first, and send `sequencing_run` anyway.
 
-The server reads TMB / MSI / GIS from the CombinedVariantOutput (SACGF/variantgrid#1904), so
-`create_specimen_measure()` / `create_specimen_measures()`, `SpecimenMeasure`, `SpecimenMeasureType` and
-`ServerFeature.SPECIMEN_MEASURES` are deprecated. They warn (`DeprecationWarning`), and still post to an older
-server that reports `specimen_measures`. A current server doesn't, so `unsupported_feature_policy` applies.
-See `examples/example_tso500.py` for a full run.
+The server reads TMB / MSI / GIS from the CombinedVariantOutput (SACGF/variantgrid#1904), which replaced
+specimen measures. See `examples/example_tso500.py` for a full run.
 
 ## Permission to write sequencing data
 

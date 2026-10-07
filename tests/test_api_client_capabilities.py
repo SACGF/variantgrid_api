@@ -58,8 +58,7 @@ def test_capabilities_accept_enums(api, capabilities_url, capabilities_json):
     """ SACGF/variantgrid_api#22 - the enums are str, so they match the plain names the server sends """
     responses.add(responses.GET, capabilities_url, json=capabilities_json, status=200)
 
-    with pytest.warns(DeprecationWarning, match="Server feature 'specimen_measures' is deprecated"):
-        assert all(api.supports(feature) for feature in ServerFeature)
+    assert all(api.supports(feature) for feature in ServerFeature)
     assert api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
     assert api.accepts_upload(UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT)
     assert not api.accepts_upload(UploadFileType.GENE_LIST)
@@ -135,13 +134,10 @@ def test_ungated_method_makes_no_capabilities_request(api, server, capabilities_
 # ------------------------------------------------------------------ #
 
 def _gated_calls(vg_objects, vcf):
-    measure = vg_objects["specimen_measures"][0]
     return {
         "create_patient": lambda api: api.create_patient(vg_objects["patient"]),
         "create_specimen": lambda api: api.create_specimen(vg_objects["specimen"]),
         "create_extraction": lambda api: api.create_extraction(vg_objects["dna_extraction"]),
-        "create_specimen_measure": lambda api: api.create_specimen_measure("2600000001", measure),
-        "create_specimen_measures": lambda api: api.create_specimen_measures("2600000001", [measure]),
         "link_sequencing_sample_extraction": lambda api: api.link_sequencing_sample_extraction(
             vg_objects["sequencing_sample_lookup_1"], "2600000001C"),
         "upload_file_file_type": lambda api: api.upload_file(vcf, path=None, file_type=CVO),
@@ -152,13 +148,12 @@ def _gated_calls(vg_objects, vcf):
     }
 
 
-GATED = ["create_patient", "create_specimen", "create_extraction", "create_specimen_measure",
-         "create_specimen_measures", "link_sequencing_sample_extraction", "upload_file_file_type",
+GATED = ["create_patient", "create_specimen", "create_extraction", "link_sequencing_sample_extraction",
+         "upload_file_file_type",
          "poll_upload_status", "wait_for_annotation", "download_annotated", "annotate_vcf"]
 
 
 @pytest.mark.parametrize("method", GATED)
-@pytest.mark.filterwarnings("ignore:create_specimen_measure:DeprecationWarning")
 @responses.activate
 def test_gated_method_raises_on_legacy_under_error(api, capabilities_url, vg_objects, vcf, method):
     responses.add(responses.GET, capabilities_url, status=404)
@@ -170,7 +165,6 @@ def test_gated_method_raises_on_legacy_under_error(api, capabilities_url, vg_obj
 
 
 @pytest.mark.parametrize("method", GATED)
-@pytest.mark.filterwarnings("ignore:create_specimen_measure:DeprecationWarning")
 @responses.activate
 def test_gated_method_skips_on_legacy_under_skip(skip_api, capabilities_url, vg_objects, vcf, method, caplog):
     responses.add(responses.GET, capabilities_url, status=404)

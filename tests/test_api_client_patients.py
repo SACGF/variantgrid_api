@@ -6,9 +6,7 @@ from urllib.parse import urlparse, parse_qs
 import pytest
 import responses
 
-from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
-from variantgrid_api.data_models import ExternalReference, ExternalPK, Extraction, SpecimenMeasure, \
-    SpecimenMeasureType, ServerFeature
+from variantgrid_api.data_models import ExternalReference, ExternalPK, Extraction
 
 
 @pytest.fixture
@@ -111,65 +109,6 @@ def test_create_specimen_unknown_patient_raises(api, server, vg_objects):
                   json={"patient": ["No Patient found"]}, status=400)
     with pytest.raises(Exception):
         api.create_specimen(vg_objects["specimen"])
-
-
-# ------------------------------------------------------------------ #
-# Specimen measures - deprecated, still sent to an older server that   #
-# reports 'specimen_measures' (SACGF/variantgrid_api#30)               #
-# ------------------------------------------------------------------ #
-
-@responses.activate
-def test_create_specimen_measure(api, server, vg_objects):
-    responses.add(responses.POST, f"{server}/patients/api/v1/specimen_measure/", json={"id": 4}, status=201)
-    with pytest.warns(DeprecationWarning, match="create_specimen_measure is deprecated"):
-        api.create_specimen_measure("2600000001", vg_objects["specimen_measures"][0])
-    assert _last_json() == {
-        "specimen": "2600000001",
-        "measure_type": "T",
-        "value": 7.1,
-        "unit": "mut/Mb",
-        "method": "DRAGEN TSO500 2.1.1",
-        "source_payload": {"Total TMB": "7.1", "Coding Region Size in Megabases": "1.27"},
-        "extraction": "2600000001C",
-    }
-
-
-@responses.activate
-def test_create_specimen_measures_bulk(api, server, vg_objects):
-    url = f"{server}/patients/api/v1/specimen_measure/bulk_create"
-    responses.add(responses.POST, url, json={"specimen": "2600000001", "measures": ["x", "y"]}, status=201)
-    specimen_reference = ExternalReference.from_specimen(vg_objects["specimen"])
-    with pytest.warns(DeprecationWarning, match="create_specimen_measures is deprecated"):
-        api.create_specimen_measures(specimen_reference, vg_objects["specimen_measures"])
-    body = _last_json()
-    assert body["specimen"] == "2600000001"
-    assert [m["measure_type"] for m in body["measures"]] == ["T", "M"]
-    msi = body["measures"][1]
-    assert msi == {"measure_type": "M", "value": 2.48, "unit": "%", "call": "Stable",
-                   "threshold": ">= 20.00%", "threshold_source": "Illumina"}
-
-
-def test_create_specimen_measures_empty_list_raises(api):
-    with pytest.raises(ValueError), pytest.warns(DeprecationWarning):
-        api.create_specimen_measures("2600000001", [])
-
-
-def test_create_specimen_measure_empty_reference_raises(api):
-    with pytest.raises(ValueError), pytest.warns(DeprecationWarning):
-        api.create_specimen_measure("", SpecimenMeasure(measure_type=SpecimenMeasureType.TMB, value=1.0))
-
-
-@responses.activate
-def test_specimen_measures_on_current_server_warn_and_post_nothing(server, api_token, vg_objects):
-    """ A current server doesn't report 'specimen_measures': the call warns, then is gated as before """
-    responses.add(responses.GET, f"{server}/api/v1/capabilities", status=200,
-                  json={"version": "4.1.0", "features": ["patients", "upload_metadata"]})
-    api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
-    with pytest.warns(DeprecationWarning, match="upload that instead"):
-        assert api.create_specimen_measures("2600000001", vg_objects["specimen_measures"]) is None
-    with pytest.warns(DeprecationWarning, match="Server feature 'specimen_measures' is deprecated"):
-        assert not api.supports(ServerFeature.SPECIMEN_MEASURES)
-    assert len(responses.calls) == 1  # only the probe
 
 
 # ------------------------------------------------------------------ #

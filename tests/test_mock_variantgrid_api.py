@@ -187,7 +187,7 @@ def test_reset_preserves_return_overrides(mock_api, vg_objects):
 
 
 # ------------------------------------------------------------------ #
-# Patient / specimen / extraction, measures, links                     #
+# Patient / specimen / extraction, links                               #
 # ------------------------------------------------------------------ #
 
 def test_mock_create_patient_specimen_extraction(mock_api, vg_objects):
@@ -196,21 +196,6 @@ def test_mock_create_patient_specimen_extraction(mock_api, vg_objects):
     assert mock_api.create_extraction(vg_objects["dna_extraction"])["reference_id"] == "2600000001C"
     for method in ("create_patient", "create_specimen", "create_extraction"):
         mock_api.assert_called_once(method)
-
-
-def test_mock_create_specimen_measure_records_args(mock_api, vg_objects):
-    measure = vg_objects["specimen_measures"][0]
-    with pytest.warns(DeprecationWarning, match="create_specimen_measure is deprecated"):
-        result = mock_api.create_specimen_measure("2600000001", measure)
-    assert mock_api.get_calls("create_specimen_measure") == [(("2600000001", measure), {})]
-    assert result["specimen"] == "2600000001"
-
-
-def test_mock_create_specimen_measures(mock_api, vg_objects):
-    with pytest.warns(DeprecationWarning, match="create_specimen_measures is deprecated"):
-        result = mock_api.create_specimen_measures("2600000001", vg_objects["specimen_measures"])
-    mock_api.assert_called_once("create_specimen_measures")
-    assert len(result["measures"]) == len(vg_objects["specimen_measures"])
 
 
 def test_mock_link_sequencing_sample_extraction_pending_override(mock_api, vg_objects):
@@ -243,8 +228,7 @@ def test_mock_default_capabilities_support_everything_gated(mock_api, vg_objects
 
 
 def test_mock_default_capabilities_accept_enums(mock_api):
-    with pytest.warns(DeprecationWarning, match="Server feature 'specimen_measures' is deprecated"):
-        assert all(mock_api.supports(feature) for feature in ServerFeature)
+    assert all(mock_api.supports(feature) for feature in ServerFeature)
     assert mock_api.supports("upload_status")
     assert mock_api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
     assert not mock_api.accepts_upload(UploadFileType.PED)
@@ -271,9 +255,9 @@ def test_mock_legacy_skips_under_skip(vg_objects):
 
 def test_mock_legacy_raises_under_error(vg_objects):
     mock_api = MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY)
-    with pytest.raises(UnsupportedFeatureError), pytest.warns(DeprecationWarning):
-        mock_api.create_specimen_measures("2600000001", vg_objects["specimen_measures"])
-    mock_api.assert_not_called("create_specimen_measures")
+    with pytest.raises(UnsupportedFeatureError):
+        mock_api.create_patient(vg_objects["patient"])
+    mock_api.assert_not_called("create_patient")
 
 
 def test_mock_legacy_skips_annotation_flow():
