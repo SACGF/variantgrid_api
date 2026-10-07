@@ -4,26 +4,24 @@
     1. Accession the patient, the specimen, and its two extractions (DNA '2600000001C', RNA '2600000001B')
     2. Post the sequencing run and sample sheet as usual
     3. Link each arm's sequencing sample to its extraction - one call per arm
-    4. Upload the DNA arm's VCFs and the RNA arm's files, naming the extraction and build in upload metadata.
-       The CombinedVariantOutput.tsv goes up if the server accepts it, otherwise the RNA arm's splice VCF.
-       The MetricsOutput.tsv (library QC) goes up if the server accepts it
-    5. Post the specimen's TMB / MSI / GIS, transcribed from CombinedVariantOutput.tsv
+    4. Upload the DNA arm's VCFs and the RNA arm's files, naming the extraction and build in upload metadata
+    5. Upload the run-level files with the run's name as 'sequencing_run' metadata, if the server accepts them:
+       CombinedVariantOutput.tsv (the pair's TMB / MSI / GIS - the server reads them from the file, so there are
+       no specimen measures to post) and MetricsOutput.tsv (library QC)
 
     Ordering is forgiving: a link or upload naming an extraction the server doesn't have yet is parked and
     attaches itself once the extraction is created, so nothing needs re-sending.
 
     Runs against any server: calls it doesn't support are skipped (UnsupportedFeaturePolicy.SKIP). The full
-    run needs a server at or after SACGF/variantgrid#1716 with the capabilities endpoint. Test data is synthetic - see tests/test_data/tso500/README.md
+    run needs a server at or after SACGF/variantgrid#1904 (CombinedVariantOutput keyed on its run). Test data is synthetic - see tests/test_data/tso500/README.md
 """
 import argparse
 import os
-from datetime import datetime
-from typing import Dict
 
 from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
 from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, \
     SampleSheet, SampleSheetLookup, SequencingSampleLookup, Patient, Specimen, Extraction, \
-    SpecimenMeasure, ExternalReference, TissueStatus, NucleicAcid, SpecimenMeasureType, UploadFileType
+    ExternalReference, TissueStatus, NucleicAcid, UploadFileType
 
 
 def parse_args():
@@ -32,53 +30,6 @@ def parse_args():
     parser.add_argument('--api-token', required=True, help='API token for authentication')
     parser.add_argument('--step', required=False, help='Run a single step (default: run all)')
     return parser.parse_args()
-
-
-def read_combined_variant_output(filename) -> Dict[str, Dict[str, str]]:
-    """ {section: {key: value}} for the key/value sections of a CombinedVariantOutput.tsv, eg [TMB] """
-    sections = {}
-    section = None
-    with open(filename) as f:
-        for line in f:
-            columns = [c for c in line.rstrip("\n").split("\t") if c]
-            if not columns:
-                continue
-            if columns[0].startswith("[") and columns[0].endswith("]"):
-                section = sections.setdefault(columns[0][1:-1], {})
-            elif section is not None and len(columns) == 2:
-                section[columns[0]] = columns[1]
-    return sections
-
-
-def get_specimen_measures(cvo_filename, dna_extraction: ExternalReference):
-    """ Transcribe, never compute: the values are copied out of the vendor file with the block they came
-        from as source_payload. Set call / threshold / threshold_source only from your lab's own policy. """
-    sections = read_combined_variant_output(cvo_filename)
-    analysis_details = sections["Analysis Details"]
-    method = f"DRAGEN TSO500 CombinedVariantOutput {analysis_details['Module Version']}"
-    measured_date = datetime.fromisoformat(f"{analysis_details['Output Date']}T{analysis_details['Output Time']}")
-
-    # (measure_type, section, key, unit)
-    measure_sources = [
-        (SpecimenMeasureType.TMB, "TMB", "Total TMB", "mut/Mb"),
-        (SpecimenMeasureType.MSI, "MSI", "Percent Unstable MSI Sites", "%"),
-        (SpecimenMeasureType.GIS, "GIS", "Genomic Instability Score", None),
-        (SpecimenMeasureType.TUMOUR_FRACTION, "GIS", "Tumor Fraction", None),
-        (SpecimenMeasureType.PLOIDY, "GIS", "Ploidy", None),
-    ]
-    measures = []
-    for measure_type, section, key, unit in measure_sources:
-        values = sections.get(section, {})
-        if values.get(key) in (None, "NA"):
-            continue
-        measures.append(SpecimenMeasure(measure_type=measure_type,
-                                        value=float(values[key]),
-                                        unit=unit,
-                                        method=method,
-                                        source_payload=values,
-                                        measured_date=measured_date,
-                                        extraction=dna_extraction))
-    return measures
 
 
 def test_api(server, api_token, step=None):
@@ -147,7 +98,6 @@ def test_api(server, api_token, step=None):
 
     cvo_filename = os.path.join(data_dir, "ExampleSample_2600000001_CombinedVariantOutput.tsv")
     metrics_output_filename = os.path.join(data_dir, "ExampleSample_2600000001_MetricsOutput.tsv")
-    specimen_measures = get_specimen_measures(cvo_filename, dna_reference)
 
     #########################
     # Call API
@@ -155,16 +105,21 @@ def test_api(server, api_token, step=None):
     # SKIP: calls an older server doesn't support are logged and skipped, so this runs against VG3 and VG4
     vg_api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
     accepts_cvo = vg_api.accepts_upload(UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT)
-    print(f"Server version: {vg_api.capabilities.version}, {accepts_cvo=}")
+    accepts_splice_vcf = vg_api.accepts_upload(UploadFileType.GENE_LEVEL_SPLICE_VCF)
+    print(f"Server version: {vg_api.capabilities.version}, {accepts_cvo=}, {accepts_splice_vcf=}")
 
-    # The one real branch: a server that imports the CVO takes the splice calls from it (sending the
-    # splice VCF as well would double them), an older one needs the splice VCF
-    if accepts_cvo:
-        uploads["combined_variant_output"] = (cvo_filename, {"genome_build": "GRCh37"})
-    else:
+    # The splice calls come from the splice VCF. Only a server from before SACGF/variantgrid#1903 (it imports
+    # the CVO but has no splice VCF importer) takes them from the CVO instead - sending both would double them
+    if accepts_splice_vcf or not accepts_cvo:
         uploads["splice_variants"] = (f"{rna_prefix}_SpliceVariants.vcf", {"extraction": rna_reference})
-    # Library QC. No metadata - the file has no coordinates, so a genome_build is a 400 (unlike the CVO)
-    uploads["metrics_output"] = (metrics_output_filename, None)
+    # Run-level files take only the run's name. The CVO names its run 'NA': without 'sequencing_run' the server
+    # uses the registered run whose sample sheet names the pair's sample IDs, and fails if there's none
+    run_metadata = {"sequencing_run": sequencing_run.name}
+    if accepts_cvo:
+        uploads["combined_variant_output"] = (cvo_filename, run_metadata if accepts_splice_vcf else
+                                              {"genome_build": "GRCh37"})  # pre-#1903, the CVO was a VCF source
+    # Library QC - 'sequencing_run' is required, the file never names its run
+    uploads["metrics_output"] = (metrics_output_filename, run_metadata)
 
     API_STEPS = {
         # 1. Accessioning - a specimen needs its patient, an extraction its specimen
@@ -187,13 +142,12 @@ def test_api(server, api_token, step=None):
         "combined_variant_output": UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT,
         "metrics_output": UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT,
     }
-    # 4. Uploads. path=None as these aren't registered SeqAuto VCFs - the metadata names the extraction instead
+    # 4. and 5. Uploads. path=None as these aren't registered SeqAuto VCFs - the metadata names the extraction
+    # (or for a run-level file, the run) instead
     for name, (filename, metadata) in uploads.items():
         file_type = UPLOAD_FILE_TYPES.get(name)
         API_STEPS[f"upload_{name}"] = lambda f=filename, m=metadata, t=file_type: vg_api.upload_file(
             f, path=None, metadata=m, file_type=t)
-    # 5. Measures describe the specimen; the DNA arm produced them
-    API_STEPS["specimen_measures"] = lambda: vg_api.create_specimen_measures(specimen_reference, specimen_measures)
 
     for name, func in API_STEPS.items():
         if step:

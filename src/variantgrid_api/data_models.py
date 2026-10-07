@@ -394,14 +394,6 @@ class NucleicAcid(str, Enum):
     RNA = "R"
 
 
-class SpecimenMeasureType(str, Enum):
-    TMB = "T"              # Tumour mutational burden
-    MSI = "M"              # Microsatellite instability
-    GIS = "G"              # Genomic instability score
-    TUMOUR_FRACTION = "F"
-    PLOIDY = "P"
-
-
 def _exclude_none():
     return config(exclude=lambda x: x is None)
 
@@ -520,37 +512,13 @@ class Extraction:
     external_pk: Optional[ExternalPK] = field(default=None, metadata=_exclude_none())
 
 
-@dataclass_json
-@dataclass
-class SpecimenMeasure:
-    """ A scalar measured on the specimen rather than on any one variant - TMB, MSI, GIS etc (SACGF/variantgrid#1559)
-
-        Transcribe these from vendor output rather than computing them, and put the raw block they came
-        from in source_payload. Send both the score (value) and the lab's call, with the threshold that
-        turned one into the other - that threshold is lab policy, not vendor output.
-
-        The specimen is passed to create_specimen_measure(s) rather than held here. A re-post for the
-        same specimen and measure_type replaces the previous value. """
-    measure_type: SpecimenMeasureType
-    value: Optional[float] = field(default=None, metadata=_exclude_none())
-    unit: Optional[str] = field(default=None, metadata=_exclude_none())             # eg 'mut/Mb', '%'
-    call: Optional[str] = field(default=None, metadata=_exclude_none())             # eg 'High', 'Stable'
-    threshold: Optional[str] = field(default=None, metadata=_exclude_none())
-    threshold_source: Optional[str] = field(default=None, metadata=_exclude_none())  # whose policy set it
-    method: Optional[str] = field(default=None, metadata=_exclude_none())           # tool and version
-    source_payload: Optional[dict] = field(default=None, metadata=_exclude_none())
-    measured_date: Optional[datetime] = field(default=None, metadata=_exclude_none())
-    extraction: Optional[ReferenceLike] = _reference_field(default=None)  # the arm that produced it
-
-
 ############################################################
 ## Server capabilities (SACGF/variantgrid_api#22)
 
 class ServerFeature(_ServerName):
     """ Features a server reports in capabilities (API_FEATURES in the variantgrid repo's
-        variantgrid/views_rest.py). Names are never removed - an older server just doesn't list a newer one """
+        variantgrid/views_rest.py). An older server just doesn't list a newer one """
     PATIENTS = "patients"
-    SPECIMEN_MEASURES = "specimen_measures"
     LINK_EXTRACTION = "link_extraction"
     UPLOAD_STATUS = "upload_status"
     JOINT_CALLED_VCF_CROSS_RUN = "joint_called_vcf_cross_run"
@@ -564,12 +532,17 @@ class UploadFileType(_ServerName):
         lower case, less the internal ones it drives itself. A server only reports those it has an importer for """
     BED = "bed"
     DRAGEN_TSO500_ALL_FUSIONS = "dragen_tso500_all_fusions"
+    # The pair's TMB / MSI / GIS and links. Send metadata {'sequencing_run': run_name}: the file names its run
+    # 'NA', and without it the server uses the registered run whose current sample sheet names the pair's
+    # sample IDs, failing the import if there's none (SACGF/variantgrid#1904)
     DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT = "dragen_tso500_combined_variant_output"
+    # Library QC for a whole run. Metadata {'sequencing_run': run_name} is required - the file never names its run
     DRAGEN_TSO500_METRICS_OUTPUT = "dragen_tso500_metrics_output"
     GENE_COVERAGE = "gene_coverage"
     GENE_LIST = "gene_list"
     GENE_LEVEL_CNV_VCF = "gene_level_cnv_vcf"
     GENE_LEVEL_INSERT_VARIANTS_ONLY = "gene_level_insert_variants_only"
+    GENE_LEVEL_SPLICE_VCF = "gene_level_splice_vcf"  # SpliceGirl's SpliceVariants.vcf (SACGF/variantgrid#1903)
     PATIENT_RECORDS = "patient_records"
     PED = "ped"
     VCF = "vcf"
