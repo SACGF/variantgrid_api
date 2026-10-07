@@ -2,7 +2,7 @@
     A BAM-first run - the sequencer emits BAM directly (or FastQs aren't kept), so there are no FastQs.
 
     Same shape as example_haem_20_999.py, but SequencingFile has no fastq_r1/fastq_r2. The record sent
-    is just bam_file + vcf_file, and the server resolves the sample from sample_name + the sample sheet.
+    is just alignment_files + vcf_file, and the server resolves the sample from sample_name + the sample sheet.
 """
 import argparse
 import dataclasses
@@ -11,7 +11,7 @@ from typing import List, Dict
 
 from variantgrid_api.api_client import VariantGridAPI
 from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, \
-    SampleSheet, JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile, SequencingFile, \
+    SampleSheet, JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, AlignmentFile, SequencingFile, \
     SequencingSampleLookup, QC, QCGeneList, Manufacturer
 
 
@@ -29,7 +29,7 @@ def _get_qc_by_sample_name(sample_sheet_lookup: SampleSheetLookup, sequencing_fi
         sequencing_sample_lookup = SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup,
                                                           sample_name=sf.sample_name)
         qc_by_name[sf.sample_name] = QC(sequencing_sample_lookup=sequencing_sample_lookup,
-                                        bam_file=dataclasses.replace(sf.bam_file, aligner=None),
+                                        alignment_files=[dataclasses.replace(sf.get_alignment_files()[0], aligner=None)],
                                         vcf_file=dataclasses.replace(sf.get_vcf_files()[0], variant_caller=None))
     return qc_by_name
 
@@ -83,11 +83,11 @@ def test_api(server, api_token, step=None):
     aligner = Aligner(name='BWA', version="0.7.18")
     variant_caller_gatk = VariantCaller(name="GATK", version="4.1.9.0")
 
-    # No fastq_r1/fastq_r2 - only BAM + VCF
+    # No fastq_r1/fastq_r2 - only BAM + VCF. A CRAM, or a BAM plus a CRAM, goes in alignment_files the same way
     sequencing_files = [
         SequencingFile(sample_name=sample_name,
-                       bam_file=BamFile(path=seq_run_path(f"1_BAM/{sample_name}.hg38.bam"),
-                                        aligner=aligner),
+                       alignment_files=[AlignmentFile(path=seq_run_path(f"1_BAM/{sample_name}.hg38.bam"),
+                                                      aligner=aligner)],
                        vcf_files=[SingleSampleVCF(path=seq_run_path(f"2_variants/gatk_per_sample/{sample_name}.gatk.hg38.vcf.gz"),
                                                   variant_caller=variant_caller_gatk)])
         for sample_name in sample_names

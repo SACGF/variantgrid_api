@@ -64,6 +64,25 @@ api.upload_file("sample.vcf.gz", path=None,
 A bare string names a record by its local reference. Use `ExternalReference(code=..., external_type=...)` to
 name it by a LIMS identifier instead. See `examples/example_tso500.py` for a full run.
 
+## BAMs and CRAMs
+
+A sequencing sample can have several alignment files, eg a BAM and its recalibrated BAM, or a BAM plus a CRAM.
+List them in `SequencingFile.alignment_files` (and `QC.alignment_files`), the file the variant caller ran on first:
+
+```
+from variantgrid_api.data_models import AlignmentFile, SequencingFile, SingleSampleVCF
+
+SequencingFile(sample_name="sample_1",
+               alignment_files=[AlignmentFile(path="/data/sample_1.bam", aligner=aligner),
+                                AlignmentFile(path="/data/sample_1.cram", aligner=aligner)],
+               vcf_files=[SingleSampleVCF(path="/data/sample_1.vcf.gz", variant_caller=variant_caller)])
+```
+
+`AlignmentFile.file_type` (`AlignmentFileType.BAM` / `CRAM`) is optional and inferred from the path. A server
+without the `alignment_files` feature gets the old wire format instead: one sequencing file record per alignment
+file as `bam_file`, and a QC's first alignment file as its `bam_file`. A CRAM there also needs the
+`cram_alignment_files` feature. `BamFile` and the `bam_file` fields still work but are deprecated.
+
 ## Talking to more than one VariantGrid version
 
 Servers of different ages accept different calls. The client asks the server which features it has

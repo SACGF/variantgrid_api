@@ -237,26 +237,24 @@ class VariantGridAPI:
         return self.create_joint_called_vcf(sample_sheet_combined_vcf_file)
 
     def create_sequencing_data(self, sample_sheet_lookup: SampleSheetLookup, sequencing_files: List[SequencingFile]):
+        """ One record per VCF, each carrying the sample's alignment files and FastQs.
+
+            A SequencingFile using alignment_files is sent as 'alignment_files' when the server supports
+            ServerFeature.ALIGNMENT_FILES. Otherwise each alignment file goes in its own record as 'bam_file' (what
+            older servers take) - a CRAM there also needs ServerFeature.CRAM_ALIGNMENT_FILES, or it is handled by
+            unsupported_feature_policy (SKIP leaves the CRAM out). A SequencingFile using only the deprecated
+            bam_file is sent exactly as before, without asking the server for its capabilities """
         self._validate_object("sample_sheet_lookup", sample_sheet_lookup)
         self._validate_list("sequencing_files", sequencing_files)
+        # Check every record before building any, as building one can ask the server for its capabilities
+        for sf in sequencing_files:
+            self._validate_sequencing_file(sf)
+
         records = []
         for sf in sequencing_files:
-            # The server requires both paths - catch it here, naming the record, rather than a 400 for the batch
-            self._validate_string(f"SequencingFile '{sf.sample_name}' bam_file.path", sf.bam_file and sf.bam_file.path)
-            vcf_files = sf.get_vcf_files()
-            self._validate_list(f"SequencingFile '{sf.sample_name}' vcf_files", vcf_files)
-            for i, vcf_file in enumerate(vcf_files):
-                self._validate_string(f"SequencingFile '{sf.sample_name}' vcf_files[{i}].path",
-                                      vcf_file and vcf_file.path)
-            # The server keeps one VCF per BAM and caller - a repeated caller would silently replace a path
-            callers = [f"{vc.name} {vc.version}" for vcf_file in vcf_files
-                       if vcf_file and (vc := vcf_file.variant_caller)]
-            if repeated := {c for c in callers if callers.count(c) > 1}:
-                raise ValueError(f"SequencingFile '{sf.sample_name}' has more than one VCF from variant caller(s) "
-                                 f"{', '.join(sorted(repeated))} - each VCF off a BAM needs its own caller")
             data = sf.to_dict()
-            data.pop("vcf_file", None)
-            data.pop("vcf_files", None)
+            for key in ("bam_file", "vcf_file", "vcf_files", "alignment_files"):
+                data.pop(key, None)
             # put into hierarchial JSON DRF expects
             fastq_r1 = data.pop("fastq_r1", None)
             fastq_r2 = data.pop("fastq_r2", None)
@@ -265,12 +263,12 @@ class VariantGridAPI:
                 if fastq_r2:
                     unaligned_reads["fastq_r2"] = {"path": fastq_r2}
                 data["unaligned_reads"] = unaligned_reads
-            elif fastq_r2:
-                raise ValueError(f"SequencingFile '{sf.sample_name}' has fastq_r2 without fastq_r1")
             # No FastQs (BAM-first run) - server resolves the sample from sample_name.
-            # The server takes one VCF per record, so each is a record sharing the BAM and FastQs
-            for vcf_file in vcf_files:
-                records.append({**data, "vcf_file": vcf_file.to_dict() if vcf_file else None})
+            # The server takes one VCF per record, so each is a record sharing the alignment files and FastQs
+            for alignment_data in self._sequencing_file_alignment_data(sf):
+                for vcf_file in sf.get_vcf_files():
+                    records.append({"sample_name": sf.sample_name, **alignment_data, **data,
+                                    "vcf_file": vcf_file.to_dict() if vcf_file else None})
 
         json_data = {
             "sample_sheet": sample_sheet_lookup.to_dict(),
@@ -279,9 +277,83 @@ class VariantGridAPI:
         return self._post("seqauto/api/v1/sequencing_files/bulk_create",
                           json_data)
 
+    def _validate_sequencing_file(self, sf: SequencingFile):
+        # The server requires both paths - catch it here, naming the record, rather than a 400 for the batch
+        if sf.alignment_files is None:
+            hint = "" if sf.bam_file else " (or set alignment_files)"
+            self._validate_string(f"SequencingFile '{sf.sample_name}' bam_file.path{hint}",
+                                  sf.bam_file and sf.bam_file.path)
+        else:
+            alignment_files = sf.get_alignment_files()
+            self._validate_list(f"SequencingFile '{sf.sample_name}' alignment_files", alignment_files)
+            for i, alignment_file in enumerate(alignment_files):
+                self._validate_string(f"SequencingFile '{sf.sample_name}' alignment_files[{i}].path",
+                                      alignment_file and alignment_file.path)
+        vcf_files = sf.get_vcf_files()
+        self._validate_list(f"SequencingFile '{sf.sample_name}' vcf_files", vcf_files)
+        for i, vcf_file in enumerate(vcf_files):
+            self._validate_string(f"SequencingFile '{sf.sample_name}' vcf_files[{i}].path",
+                                  vcf_file and vcf_file.path)
+        # The server keeps one VCF per BAM and caller - a repeated caller would silently replace a path
+        callers = [f"{vc.name} {vc.version}" for vcf_file in vcf_files
+                   if vcf_file and (vc := vcf_file.variant_caller)]
+        if repeated := {c for c in callers if callers.count(c) > 1}:
+            raise ValueError(f"SequencingFile '{sf.sample_name}' has more than one VCF from variant caller(s) "
+                             f"{', '.join(sorted(repeated))} - each VCF off a BAM needs its own caller")
+        if sf.fastq_r2 and not sf.fastq_r1:
+            raise ValueError(f"SequencingFile '{sf.sample_name}' has fastq_r2 without fastq_r1")
+
+    def _sequencing_file_alignment_data(self, sf: SequencingFile) -> List[dict]:
+        """ The alignment file part of sf's records - one dict per record """
+        if sf.alignment_files is None:
+            # Only the deprecated bam_file - sent as before
+            return [{"bam_file": sf.bam_file.to_dict() if sf.bam_file else None}]
+        alignment_files = sf.get_alignment_files()
+        if self.supports(ServerFeature.ALIGNMENT_FILES):
+            return [{"alignment_files": [af.to_dict() if af else None for af in alignment_files]}]
+
+        # Older server - one record per alignment file, sent as bam_file
+        alignment_data = []
+        for af in alignment_files:
+            if af is None:
+                alignment_data.append({"bam_file": None})  # Already reported by _validate_sequencing_file
+            elif af.is_cram() and not self.supports(ServerFeature.CRAM_ALIGNMENT_FILES):
+                self._unsupported(f"SequencingFile '{sf.sample_name}' CRAM '{af.path}' "
+                                  f"(server doesn't support feature '{ServerFeature.CRAM_ALIGNMENT_FILES}')")
+            else:
+                alignment_data.append({"bam_file": self._legacy_bam_file_json(af.to_dict())})
+        return alignment_data
+
+    @staticmethod
+    def _legacy_bam_file_json(alignment_file_data: dict) -> dict:
+        """ An alignment file as an older server's 'bam_file' - it has no file_type """
+        return {k: v for k, v in alignment_file_data.items() if k != "file_type"}
+
+    def _qc_record_json(self, qc_record) -> dict:
+        """ qc_record.to_dict(), with its QC's alignment files as 'alignment_files' (bam_file first) to a server
+            with ServerFeature.ALIGNMENT_FILES. An older server takes one 'bam_file' - it finds the QC by
+            sequencing sample, VCF path and that path, so the first alignment file (the one the VCF was called
+            from) is sent. A QC using only the deprecated bam_file is sent as before, with no probe """
+        json_data = qc_record.to_dict()
+        qc = qc_record.qc
+        if qc is None or qc.alignment_files is None:
+            return json_data
+        qc_data = json_data["qc"]
+        qc_data.pop("bam_file", None)
+        qc_data.pop("alignment_files", None)
+        alignment_files = qc.get_alignment_files()
+        if self.supports(ServerFeature.ALIGNMENT_FILES):
+            qc_data["alignment_files"] = [af.to_dict() if af else None for af in alignment_files]
+        else:
+            first = alignment_files[0] if alignment_files else None
+            json_data["qc"] = {"sequencing_sample": qc_data.pop("sequencing_sample"),
+                               "bam_file": self._legacy_bam_file_json(first.to_dict()) if first else None,
+                               **qc_data}
+        return json_data
+
     def create_qc_gene_list(self, qc_gene_list: QCGeneList):
         self._validate_object("qc_gene_list", qc_gene_list)
-        json_data = qc_gene_list.to_dict()
+        json_data = self._qc_record_json(qc_gene_list)
         return self._post("seqauto/api/v1/qc_gene_list/",
                           json_data)
 
@@ -290,7 +362,7 @@ class VariantGridAPI:
         self._validate_list("qc_gene_lists", qc_gene_lists)
         json_data = {
             "records": [
-                qcgl.to_dict() for qcgl in qc_gene_lists
+                self._qc_record_json(qcgl) for qcgl in qc_gene_lists
             ]
         }
         return self._post("seqauto/api/v1/qc_gene_list/bulk_create",
@@ -298,7 +370,7 @@ class VariantGridAPI:
 
     def create_qc_exec_stats(self, qc_exec_stats: QCExecStats):
         self._validate_object("qc_exec_stats", qc_exec_stats)
-        json_data = qc_exec_stats.to_dict()
+        json_data = self._qc_record_json(qc_exec_stats)
         return self._post("seqauto/api/v1/qc_exec_summary/",
                           json_data)
 
@@ -306,7 +378,7 @@ class VariantGridAPI:
         self._validate_list("qc_exec_stats", qc_exec_stats)
         json_data = {
             "records": [
-                qces.to_dict() for qces in qc_exec_stats
+                self._qc_record_json(qces) for qces in qc_exec_stats
             ]
         }
         return self._post("seqauto/api/v1/qc_exec_summary/bulk_create",
@@ -316,7 +388,7 @@ class VariantGridAPI:
         self._validate_list("qc_gene_coverage_list", qc_gene_coverage_list)
         json_data = {
             "records": [
-                qcgc.to_dict() for qcgc in qc_gene_coverage_list
+                self._qc_record_json(qcgc) for qcgc in qc_gene_coverage_list
             ]
         }
         return self._post("seqauto/api/v1/qc_gene_coverage/bulk_create",

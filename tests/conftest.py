@@ -7,7 +7,7 @@ import pytest
 from variantgrid_api.api_client import VariantGridAPI
 from variantgrid_api.data_models import (
     EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, SampleSheet,
-    JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile,
+    JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, AlignmentFile,
     SequencingFile, SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer,
     Patient, Specimen, Extraction, SpecimenMeasure, ExternalPK, ExternalReference, Sex, TissueStatus, NucleicAcid,
     SpecimenMeasureType, ServerCapabilities
@@ -29,7 +29,7 @@ def capabilities_json():
         "version": "4.0.0",
         "git_hash": "2130cffe0",
         "features": ["patients", "specimen_measures", "link_extraction", "upload_status",
-                     "joint_called_vcf_cross_run", "upload_metadata"],
+                     "joint_called_vcf_cross_run", "upload_metadata", "cram_alignment_files", "alignment_files"],
         "upload_file_types": ["vcf", "gene_coverage", "dragen_tso500_all_fusions",
                               "dragen_tso500_combined_variant_output", "dragen_tso500_metrics_output",
                               "gene_level_cnv_vcf"],
@@ -111,32 +111,33 @@ def vg_objects(data_dir):
     single_sample_vcf_filename_1 = seq_run_path("2_variants/gatk_per_sample/fake_sample_1.gatk.hg38.vcf.gz")
     single_sample_vcf_filename_2 = seq_run_path("2_variants/gatk_per_sample/fake_sample_2.gatk.hg38.vcf.gz")
 
-    bam_file_1 = BamFile(path=seq_run_path("1_BAM/fake_sample_1.hg38.bam"), aligner=aligner)
+    bam_file_1 = AlignmentFile(path=seq_run_path("1_BAM/fake_sample_1.hg38.bam"), aligner=aligner)
     vcf_file_1 = SingleSampleVCF(path=single_sample_vcf_filename_1, variant_caller=variant_caller_gatk)
 
-    bam_file_2 = BamFile(path=seq_run_path("1_BAM/fake_sample_2.hg38.bam"), aligner=aligner)
+    bam_file_2 = AlignmentFile(path=seq_run_path("1_BAM/fake_sample_2.hg38.bam"), aligner=aligner)
     vcf_file_2 = SingleSampleVCF(path=single_sample_vcf_filename_2, variant_caller=variant_caller_gatk)
 
     sequencing_files = [
         SequencingFile(sample_name="fake_sample_1",
                        fastq_r1=seq_run_path("0_fastq/fake_sample_1_R1.fastq.gz"),
                        fastq_r2=seq_run_path("0_fastq/fake_sample_1_R2.fastq.gz"),
-                       bam_file=bam_file_1, vcf_files=[vcf_file_1]),
+                       alignment_files=[bam_file_1], vcf_files=[vcf_file_1]),
         SequencingFile(sample_name="fake_sample_2",
                        fastq_r1=seq_run_path("0_fastq/fake_sample_2_R1.fastq.gz"),
                        fastq_r2=seq_run_path("0_fastq/fake_sample_2_R1.fastq.gz"),
-                       bam_file=bam_file_2, vcf_files=[vcf_file_2]),
+                       alignment_files=[bam_file_2], vcf_files=[vcf_file_2]),
     ]
 
     bam_and_vcf = {}
     for sf in sequencing_files:
-        bam_and_vcf[sf.sample_name] = (sf.bam_file.__class__(**{**sf.bam_file.__dict__, "aligner": None}),
+        bam_and_vcf[sf.sample_name] = (dataclasses.replace(sf.alignment_files[0], aligner=None),
                                        dataclasses.replace(sf.vcf_files[0], variant_caller=None))
 
     qc_by_name = {}
-    for sample_name, (bam_file, vcf_file) in bam_and_vcf.items():
+    for sample_name, (alignment_file, vcf_file) in bam_and_vcf.items():
         ssl = SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup, sample_name=sample_name)
-        qc_by_name[sample_name] = QC(sequencing_sample_lookup=ssl, bam_file=bam_file, vcf_file=vcf_file)
+        qc_by_name[sample_name] = QC(sequencing_sample_lookup=ssl, alignment_files=[alignment_file],
+                                     vcf_file=vcf_file)
 
     gene_list = ["TUBA1A","TUBA8","FLNA","TUBB2B","TUBB3","COL4A1","KIAA1279"]
     qc_gene_lists = [
