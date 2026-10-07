@@ -150,3 +150,56 @@ def test_server_without_upload_status_is_error(vcf, capsys):
     assert rc == cli.EXIT_ERROR
     assert "can't annotate" in capsys.readouterr().err
     assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_not_ready_says_which_gate(vcf, capsys):
+    """ SACGF/variantgrid_api#25 - import at 100% but annotation runs outstanding must say so """
+    _add_capabilities()
+    responses.add(responses.GET, STATUS_RE, status=200,
+                  json={"annotation_complete": False, "error": None, "progress_percent": 100.0,
+                        "pipeline_status": "Success", "remaining_annotation_runs": 2})
+
+    rc = cli.main(_argv(vcf))
+
+    assert rc == cli.EXIT_PENDING
+    out = capsys.readouterr().out
+    assert "not ready yet - pipeline Success, import 100.0%, 2 annotation runs remaining" in out
+
+
+@pytest.mark.parametrize("status, reason", [
+    ({"progress_percent": 40}, "import 40%"),
+    ({"import_status": "Processing"}, "import Processing"),
+    ({"remaining_annotation_runs": 1}, "1 annotation run remaining"),
+    ({"annotation_complete": False, "remaining_annotation_runs": 0}, "annotation not complete"),
+    ({"annotation_complete": False, "downloads_available": False}, "annotation not complete, downloads not available"),
+    ({}, ""),
+])
+def test_pending_reason(status, reason):
+    assert cli._pending_reason(status) == reason
+
+
+@responses.activate
+def test_verbose_logs_requests_and_status_to_stderr(vcf, capsys):
+    _add_capabilities()
+    responses.add(responses.GET, STATUS_RE, status=200,
+                  json={"annotation_complete": False, "error": None, "remaining_annotation_runs": 2})
+
+    rc = cli.main(_argv(vcf, "--verbose"))
+
+    assert rc == cli.EXIT_PENDING
+    err = capsys.readouterr().err
+    assert "Response from" in err
+    assert '"remaining_annotation_runs": 2' in err
+
+
+@responses.activate
+def test_not_verbose_logs_nothing(vcf, capsys):
+    _add_capabilities()
+    responses.add(responses.GET, STATUS_RE, status=200,
+                  json={"annotation_complete": False, "error": None, "remaining_annotation_runs": 2})
+
+    rc = cli.main(_argv(vcf))
+
+    assert rc == cli.EXIT_PENDING
+    assert capsys.readouterr().err == ""

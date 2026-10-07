@@ -36,9 +36,14 @@ $ vg_api annotate_vcf input.vcf.gz -o results/
 Uploaded input.vcf.gz (id=13256).
 Annotating input.vcf.gz - run the same command again later to download.
 
+$ vg_api annotate_vcf input.vcf.gz -o results/        # still annotating
+input.vcf.gz: not ready yet - pipeline Success, import 100.0%, 2 annotation runs remaining. Run the same command again later.
+
 $ vg_api annotate_vcf input.vcf.gz -o results/        # once it's done
 Annotated vcf written to results/input.vcf_annotated_v254_GRCh38.vcf.gz
 ```
+
+Add `--verbose` to log each request, response and the full upload status to stderr.
 
 From Python it's `upload_file()` / `poll_upload_status()` / `download_annotated()`, or the blocking
 `annotate_vcf()` one-liner. See
