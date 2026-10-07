@@ -8,6 +8,17 @@ from typing import Optional, List, Union, FrozenSet, ClassVar
 from dataclasses_json import dataclass_json, config
 
 
+class _ServerName(str, Enum):
+    """ A name from the server's vocabulary. Subclasses str so plain strings and these are interchangeable,
+        and formats as its value so messages read 'patients' rather than 'ServerFeature.PATIENTS' """
+
+    def __str__(self):
+        return self.value
+
+    def __format__(self, format_spec):
+        return format(self.value, format_spec)
+
+
 @dataclass_json
 @dataclass
 class EnrichmentKit:
@@ -166,11 +177,45 @@ class SampleSheetCombinedVCFFile(JointCalledVCF):
         )
 
 
+class AlignmentFileType(_ServerName):
+    """ What an AlignmentFile holds. The server infers it from the path the same way as from_path() """
+    BAM = "bam"
+    CRAM = "cram"
+
+    @staticmethod
+    def from_path(path: str) -> 'AlignmentFileType':
+        if path and path.lower().endswith(".cram"):
+            return AlignmentFileType.CRAM
+        return AlignmentFileType.BAM
+
+
 @dataclass_json
 @dataclass
-class BamFile:
+class AlignmentFile:
+    """ A BAM or CRAM (mirrors the server ``AlignmentFile`` model, SACGF/variantgrid#2102).
+
+        file_type is optional - leave it unset and it is inferred from the path (see get_file_type()) """
     path: str
     aligner: Optional[Aligner] = field(default=None, metadata=config(exclude=lambda x: x is None))
+    file_type: Optional[AlignmentFileType] = field(default=None, metadata=config(exclude=lambda x: x is None))
+
+    def get_file_type(self) -> AlignmentFileType:
+        return self.file_type or AlignmentFileType.from_path(self.path)
+
+    def is_cram(self) -> bool:
+        return self.get_file_type() == AlignmentFileType.CRAM
+
+
+@dataclass_json
+@dataclass
+class BamFile(AlignmentFile):
+    """Deprecated alias for :class:`AlignmentFile` - use that instead. """
+    def __post_init__(self):
+        warnings.warn(
+            "BamFile is deprecated; use AlignmentFile instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
 
 @dataclass_json
@@ -198,26 +243,42 @@ class VCFFile(SingleSampleVCF):
 class SequencingFile:
     """ FastQs are optional - BAM-first runs (sequencer emits BAM, or FastQs not kept) send just BAM + VCF
 
-        vcf_files: the VCFs called off this BAM, one per variant caller, eg DRAGEN TSO 500's small variant VCF and
-        its gene-level CNV VCF. The server keeps one VCF per BAM and caller, so a second with the same caller
-        would replace the first - create_sequencing_data() raises instead.
+        alignment_files: the BAMs / CRAMs for this sample, eg a BAM and its recalibrated BAM, or a BAM and a
+        CRAM. A server without the 'alignment_files' feature gets one record per alignment file, as bam_file.
 
-        vcf_file is deprecated - use vcf_files. It still works (set it and it is sent, read it back as before),
-        and get_vcf_files() gives both """
+        vcf_files: the VCFs called off the alignment files, one per variant caller, eg DRAGEN TSO 500's small
+        variant VCF and its gene-level CNV VCF. The server keeps one VCF per BAM and caller, so a second with the
+        same caller would replace the first - create_sequencing_data() raises instead.
+
+        bam_file and vcf_file are deprecated - use alignment_files and vcf_files. They still work (set them and
+        they are sent as before, read them back as before), and get_alignment_files() / get_vcf_files() give both """
     sample_name: str
-    bam_file: BamFile
+    bam_file: Optional[AlignmentFile] = field(default=None, metadata=config(exclude=lambda x: x is None))
     vcf_file: Optional[SingleSampleVCF] = field(default=None, metadata=config(exclude=lambda x: x is None))
     fastq_r1: Optional[str] = field(default=None, metadata=config(exclude=lambda x: x is None))
     fastq_r2: Optional[str] = field(default=None, metadata=config(exclude=lambda x: x is None))
     vcf_files: Optional[List[SingleSampleVCF]] = field(default=None, metadata=config(exclude=lambda x: x is None))
+    alignment_files: Optional[List[AlignmentFile]] = \
+        field(default=None, metadata=config(exclude=lambda x: x is None))
 
     def __post_init__(self):
+        if self.bam_file is not None:
+            warnings.warn(
+                "SequencingFile.bam_file is deprecated; use alignment_files instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
         if self.vcf_file is not None:
             warnings.warn(
                 "SequencingFile.vcf_file is deprecated; use vcf_files instead.",
                 DeprecationWarning,
                 stacklevel=3,
             )
+
+    def get_alignment_files(self) -> List[AlignmentFile]:
+        """ bam_file (deprecated) then alignment_files """
+        alignment_files = [self.bam_file] if self.bam_file is not None else []
+        return alignment_files + list(self.alignment_files or [])
 
     def get_vcf_files(self) -> List[SingleSampleVCF]:
         """ vcf_file (deprecated) then vcf_files """
@@ -232,8 +293,27 @@ class QC:
         We use this to match gene lists, exec stats and coverage below
      """
     sequencing_sample_lookup: SequencingSampleLookup = field(metadata=config(field_name="sequencing_sample"))
-    bam_file: BamFile
-    vcf_file: SingleSampleVCF
+    # Deprecated - use alignment_files. Still works and is sent as before
+    bam_file: Optional[AlignmentFile] = field(default=None, metadata=config(exclude=lambda x: x is None))
+    # Required - only has a default so alignment_files can follow bam_file without breaking positional args
+    vcf_file: Optional[SingleSampleVCF] = None
+    # The sample's alignment files, as in its SequencingFile. The server finds the QC by sequencing sample and
+    # VCF path - an older server also matches the first alignment file's path, sent to it as bam_file
+    alignment_files: Optional[List[AlignmentFile]] = \
+        field(default=None, metadata=config(exclude=lambda x: x is None))
+
+    def __post_init__(self):
+        if self.bam_file is not None:
+            warnings.warn(
+                "QC.bam_file is deprecated; use alignment_files instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+
+    def get_alignment_files(self) -> List[AlignmentFile]:
+        """ bam_file (deprecated) then alignment_files """
+        alignment_files = [self.bam_file] if self.bam_file is not None else []
+        return alignment_files + list(self.alignment_files or [])
 
 
 @dataclass_json
@@ -435,17 +515,6 @@ class Extraction:
 ############################################################
 ## Server capabilities (SACGF/variantgrid_api#22)
 
-class _ServerName(str, Enum):
-    """ A name from the server's vocabulary. Subclasses str so plain strings and these are interchangeable,
-        and formats as its value so messages read 'patients' rather than 'ServerFeature.PATIENTS' """
-
-    def __str__(self):
-        return self.value
-
-    def __format__(self, format_spec):
-        return format(self.value, format_spec)
-
-
 class ServerFeature(_ServerName):
     """ Features a server reports in capabilities (API_FEATURES in the variantgrid repo's
         variantgrid/views_rest.py). An older server just doesn't list a newer one """
@@ -454,6 +523,8 @@ class ServerFeature(_ServerName):
     UPLOAD_STATUS = "upload_status"
     JOINT_CALLED_VCF_CROSS_RUN = "joint_called_vcf_cross_run"
     UPLOAD_METADATA = "upload_metadata"
+    CRAM_ALIGNMENT_FILES = "cram_alignment_files"  # a 'bam_file' path ending .cram is stored as a CRAM
+    ALIGNMENT_FILES = "alignment_files"  # SequencingFile and QC 'alignment_files' (SACGF/variantgrid#2105)
 
 
 class UploadFileType(_ServerName):

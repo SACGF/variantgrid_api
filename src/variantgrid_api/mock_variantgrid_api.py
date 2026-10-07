@@ -159,6 +159,14 @@ class MockVariantGridAPI:
         return self._ret("create_sample_sheet_combined_vcf_file", {"path": sscvf.path})
 
     def create_sequencing_data(self, sample_sheet_lookup, sequencing_files):
+        # As VariantGridAPI: alignment_files go to an older server as bam_file, and a CRAM there needs
+        # cram_alignment_files. SKIP still records the call (the real client still posts the other files)
+        if not self.supports(ServerFeature.ALIGNMENT_FILES) and not self.supports(ServerFeature.CRAM_ALIGNMENT_FILES):
+            for sf in sequencing_files:
+                for af in (sf.get_alignment_files() if sf.alignment_files is not None else []):
+                    if af is not None and af.is_cram():
+                        self._unsupported(f"SequencingFile '{sf.sample_name}' CRAM '{af.path}' "
+                                          f"(server doesn't support feature '{ServerFeature.CRAM_ALIGNMENT_FILES}')")
         self._record("create_sequencing_data", sample_sheet_lookup, sequencing_files)
         return self._ret("create_sequencing_data", {"created": len(sequencing_files)})
 

@@ -11,7 +11,7 @@ import csv
 
 from variantgrid_api.api_client import VariantGridAPI
 from variantgrid_api.data_models import EnrichmentKit, SequencingRun, SequencingSample, SampleSheet, \
-    JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, BamFile, SequencingFile, \
+    JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, AlignmentFile, SequencingFile, \
     SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage
 
 
@@ -55,18 +55,18 @@ def _file_md5sum(filename):
 
 
 def _get_qc_by_sample_name(sample_sheet_lookup: SampleSheetLookup, sequencing_files: List[SequencingFile]) -> Dict[str, QC]:
-    bam_and_vcf_by_name = {}
+    alignment_and_vcf_by_name = {}
     for sf in sequencing_files:
-        bam_file = dataclasses.replace(sf.bam_file, aligner=None)
+        alignment_file = dataclasses.replace(sf.get_alignment_files()[0], aligner=None)
         vcf_file = dataclasses.replace(sf.get_vcf_files()[0], variant_caller=None)
-        bam_and_vcf_by_name[sf.sample_name] = (bam_file, vcf_file)
+        alignment_and_vcf_by_name[sf.sample_name] = (alignment_file, vcf_file)
 
     qc_by_name = {}
-    for sample_name, (bam_file, vcf_file) in bam_and_vcf_by_name.items():
+    for sample_name, (alignment_file, vcf_file) in alignment_and_vcf_by_name.items():
         sequencing_sample_lookup = SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup,
                                                           sample_name=sample_name)
         qc_by_name[sample_name] = QC(sequencing_sample_lookup=sequencing_sample_lookup,
-                                     bam_file=bam_file,
+                                     alignment_files=[alignment_file],
                                      vcf_file=vcf_file)
     return qc_by_name
 
@@ -240,7 +240,7 @@ def run_api(server, api_token, step=None):
 
     aligner = Aligner(name='BWA', version="0.7.18")
     variant_caller_gatk = VariantCaller(name="GATK", version="4.1.9.0")
-    bam_file = BamFile(
+    alignment_file = AlignmentFile(
         path=seq_run_path(f"1_BAM/{SAMPLE}.hg38.bam"),
         aligner=aligner)
     vcf_file = SingleSampleVCF(
@@ -251,7 +251,7 @@ def run_api(server, api_token, step=None):
         SequencingFile(sample_name=f"{SAMPLE}",
                        fastq_r1=seq_run_path(f"0_fastq/{SAMPLE}_R1.fastq.gz"),
                        fastq_r2=seq_run_path(f"0_fastq/{SAMPLE}_R2.fastq.gz"),
-                       bam_file=bam_file,
+                       alignment_files=[alignment_file],
                        vcf_files=[vcf_file])
 
     ]

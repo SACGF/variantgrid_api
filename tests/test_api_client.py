@@ -7,7 +7,8 @@ import pytest
 import responses
 
 from variantgrid_api.api_client import VariantGridAPI, DateTimeEncoder, EmptyInputPolicy
-from variantgrid_api.data_models import BamFile, SequencingFile, SingleSampleVCF, VariantCaller
+from variantgrid_api.data_models import ServerCapabilities
+from variantgrid_api.data_models import AlignmentFile, SequencingFile, SingleSampleVCF, VariantCaller
 
 
 def _last_json():
@@ -31,10 +32,10 @@ def test_create_sample_sheet_rewrites_sequencing_run_to_name(api, server, vg_obj
     assert isinstance(body["sequencing_run"], str)
 
 @responses.activate
-def test_create_sequencing_data_builds_unaligned_reads(api, server, vg_objects):
+def test_create_sequencing_data_builds_unaligned_reads(vg4_api, server, vg_objects):
     url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
     responses.add(responses.POST, url, json={"created": 2}, status=200)
-    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], vg_objects["sequencing_files"])
+    vg4_api.create_sequencing_data(vg_objects["sample_sheet_lookup"], vg_objects["sequencing_files"])
     body = _last_json()
     assert "records" in body and len(body["records"]) == 2
     r0 = body["records"][0]
@@ -42,23 +43,23 @@ def test_create_sequencing_data_builds_unaligned_reads(api, server, vg_objects):
     assert "fastq_r1" in r0["unaligned_reads"] and "path" in r0["unaligned_reads"]["fastq_r1"]
 
 @responses.activate
-def test_create_sequencing_data_bam_first_omits_unaligned_reads(api, server, vg_objects):
-    """ BAM-first run (no FastQs) - record is just sample_name + bam_file + vcf_file """
+def test_create_sequencing_data_bam_first_omits_unaligned_reads(vg4_api, server, vg_objects):
+    """ BAM-first run (no FastQs) - record is just sample_name + alignment_files + vcf_file """
     url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
     responses.add(responses.POST, url, json={"created": 2}, status=200)
     sequencing_files = [dataclasses.replace(sf, fastq_r1=None, fastq_r2=None)
                         for sf in vg_objects["sequencing_files"]]
-    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+    vg4_api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
     body = _last_json()
     for record in body["records"]:
-        assert set(record.keys()) == {"sample_name", "bam_file", "vcf_file"}
+        assert set(record.keys()) == {"sample_name", "alignment_files", "vcf_file"}
 
 @responses.activate
-def test_create_sequencing_data_single_end_fastq(api, server, vg_objects):
+def test_create_sequencing_data_single_end_fastq(vg4_api, server, vg_objects):
     url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
     responses.add(responses.POST, url, json={"created": 2}, status=200)
     sequencing_files = [dataclasses.replace(sf, fastq_r2=None) for sf in vg_objects["sequencing_files"]]
-    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+    vg4_api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
     r0 = _last_json()["records"][0]
     assert list(r0["unaligned_reads"].keys()) == ["fastq_r1"]
 
@@ -73,10 +74,13 @@ def test_create_sequencing_data_fastq_r2_without_r1_raises(api, vg_objects):
     ({"vcf_files": [None]}, r"vcf_files\[0\].path"),
     ({"vcf_files": [SingleSampleVCF(path=None)]}, r"vcf_files\[0\].path"),
     ({"vcf_files": [SingleSampleVCF(path="")]}, r"vcf_files\[0\].path"),
-    ({"bam_file": None}, "bam_file.path"),
-    ({"bam_file": BamFile(path=None)}, "bam_file.path"),
+    ({"alignment_files": None}, "bam_file.path"),
+    ({"alignment_files": []}, "alignment_files"),
+    ({"alignment_files": [AlignmentFile(path=None)]}, r"alignment_files\[0\].path"),
+    ({"alignment_files": None, "bam_file": AlignmentFile(path=None)}, "bam_file.path"),
 ])
 @responses.activate
+@pytest.mark.filterwarnings("ignore:SequencingFile.bam_file is deprecated:DeprecationWarning")
 def test_create_sequencing_data_missing_path_names_record(api, vg_objects, changes, name):
     """ SACGF/variantgrid_api#23 - caught before sending, naming the record, rather than a 400 for the batch """
     sequencing_files = list(vg_objects["sequencing_files"])
@@ -86,8 +90,10 @@ def test_create_sequencing_data_missing_path_names_record(api, vg_objects, chang
     assert len(responses.calls) == 0
 
 @responses.activate
-def test_create_sequencing_data_missing_vcf_path_warns_and_posts(server, api_token, vg_objects, caplog):
+def test_create_sequencing_data_missing_vcf_path_warns_and_posts(server, api_token, vg_objects, caplog,
+                                                                 capabilities_json):
     api = VariantGridAPI(server, api_token, empty_input_policy=EmptyInputPolicy.WARN)
+    api._capabilities = ServerCapabilities.from_json(capabilities_json)
     url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
     responses.add(responses.POST, url, json={"created": 2}, status=200)
     sequencing_files = list(vg_objects["sequencing_files"])
@@ -97,7 +103,7 @@ def test_create_sequencing_data_missing_vcf_path_warns_and_posts(server, api_tok
     assert any("SequencingFile 'fake_sample_1' vcf_files[0].path" in r.message for r in caplog.records)
 
 @responses.activate
-def test_create_sequencing_data_vcf_files_share_the_bam(api, server, vg_objects):
+def test_create_sequencing_data_vcf_files_share_the_bam(vg4_api, server, vg_objects):
     """ eg DRAGEN TSO 500's CNV VCF beside its small variant VCF - one record per VCF, same BAM and FastQs """
     url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
     responses.add(responses.POST, url, json={"created": 3}, status=200)
@@ -105,7 +111,7 @@ def test_create_sequencing_data_vcf_files_share_the_bam(api, server, vg_objects)
     sequencing_files = list(vg_objects["sequencing_files"])
     sf = sequencing_files[0]
     sequencing_files[0] = dataclasses.replace(sf, vcf_files=sf.vcf_files + [cnv_vcf])
-    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
+    vg4_api.create_sequencing_data(vg_objects["sample_sheet_lookup"], sequencing_files)
 
     records = _last_json()["records"]
     assert [r["sample_name"] for r in records] == ["fake_sample_1", "fake_sample_1", "fake_sample_2"]
@@ -113,7 +119,7 @@ def test_create_sequencing_data_vcf_files_share_the_bam(api, server, vg_objects)
     assert "vcf_files" not in first
     assert first["vcf_file"]["path"] == sf.vcf_files[0].path
     assert second["vcf_file"]["path"] == "/data/fake_sample_1.cnv.vcf"
-    assert second["bam_file"] == first["bam_file"]
+    assert second["alignment_files"] == first["alignment_files"]
     assert second["unaligned_reads"] == first["unaligned_reads"]
 
 def test_create_sequencing_data_vcf_files_same_caller_raises(api, vg_objects):
@@ -125,19 +131,19 @@ def test_create_sequencing_data_vcf_files_same_caller_raises(api, vg_objects):
         api.create_sequencing_data(vg_objects["sample_sheet_lookup"], [sf])
 
 @responses.activate
-def test_create_sequencing_data_deprecated_vcf_file_still_sent(api, server, vg_objects):
+def test_create_sequencing_data_deprecated_vcf_file_still_sent(vg4_api, server, vg_objects):
     """ vcf_file is deprecated for vcf_files, but a client still using it sends the same records as before """
     url = f"{server}/seqauto/api/v1/sequencing_files/bulk_create"
     responses.add(responses.POST, url, json={"created": 2}, status=200)
     old_style = []
     for sf in vg_objects["sequencing_files"]:
         with pytest.warns(DeprecationWarning, match="vcf_file is deprecated"):
-            old_style.append(SequencingFile(sample_name=sf.sample_name, bam_file=sf.bam_file,
+            old_style.append(SequencingFile(sample_name=sf.sample_name, alignment_files=sf.alignment_files,
                                             vcf_file=sf.vcf_files[0], fastq_r1=sf.fastq_r1, fastq_r2=sf.fastq_r2))
-    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], old_style)
+    vg4_api.create_sequencing_data(vg_objects["sample_sheet_lookup"], old_style)
     old_records = _last_json()["records"]
 
-    api.create_sequencing_data(vg_objects["sample_sheet_lookup"], vg_objects["sequencing_files"])
+    vg4_api.create_sequencing_data(vg_objects["sample_sheet_lookup"], vg_objects["sequencing_files"])
     assert old_records == _last_json()["records"]
     assert old_style[0].vcf_file.path == old_style[0].get_vcf_files()[0].path
 
@@ -256,21 +262,21 @@ def test_sequencing_run_has_vcf(api, server, vg_objects):
 
 
 @responses.activate
-def test_create_qc_gene_list_posts(api, server, vg_objects):
+def test_create_qc_gene_list_posts(vg4_api, server, vg_objects):
     url = f"{server}/seqauto/api/v1/qc_gene_list/"
     responses.add(responses.POST, url, json={"ok": True}, status=200)
 
-    out = api.create_qc_gene_list(vg_objects["qc_gene_lists"][0])
+    out = vg4_api.create_qc_gene_list(vg_objects["qc_gene_lists"][0])
     assert out == {"ok": True}
     body = _last_json()
     assert "gene_list" in body and len(body["gene_list"]) > 0
 
 @responses.activate
-def test_create_qc_exec_stats_posts(api, server, vg_objects):
+def test_create_qc_exec_stats_posts(vg4_api, server, vg_objects):
     url = f"{server}/seqauto/api/v1/qc_exec_summary/"
     responses.add(responses.POST, url, json={"ok": True}, status=200)
 
-    out = api.create_qc_exec_stats(vg_objects["qc_exec_stats"][0])
+    out = vg4_api.create_qc_exec_stats(vg_objects["qc_exec_stats"][0])
     assert out == {"ok": True}
     body = _last_json()
     assert "reads" in body

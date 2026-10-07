@@ -13,10 +13,10 @@ def assert_bulk_post(api_call, url, n):
 
 
 @responses.activate
-def test_create_multiple_qc_gene_lists(api, server, vg_objects):
+def test_create_multiple_qc_gene_lists(vg4_api, server, vg_objects):
     url = f"{server}/seqauto/api/v1/qc_gene_list/bulk_create"
     records = assert_bulk_post(
-        lambda: api.create_multiple_qc_gene_lists(vg_objects["qc_gene_lists"]),
+        lambda: vg4_api.create_multiple_qc_gene_lists(vg_objects["qc_gene_lists"]),
         url,
         n=len(vg_objects["qc_gene_lists"])
     )
@@ -25,10 +25,10 @@ def test_create_multiple_qc_gene_lists(api, server, vg_objects):
 
 
 @responses.activate
-def test_create_multiple_qc_exec_stats(api, server, vg_objects):
+def test_create_multiple_qc_exec_stats(vg4_api, server, vg_objects):
     url = f"{server}/seqauto/api/v1/qc_exec_summary/bulk_create"
     records = assert_bulk_post(
-        lambda: api.create_multiple_qc_exec_stats(vg_objects["qc_exec_stats"]),
+        lambda: vg4_api.create_multiple_qc_exec_stats(vg_objects["qc_exec_stats"]),
         url,
         n=len(vg_objects["qc_exec_stats"])
     )
@@ -36,10 +36,10 @@ def test_create_multiple_qc_exec_stats(api, server, vg_objects):
 
 
 @responses.activate
-def test_create_multiple_qc_gene_coverage(api, server, vg_objects):
+def test_create_multiple_qc_gene_coverage(vg4_api, server, vg_objects):
     url = f"{server}/seqauto/api/v1/qc_gene_coverage/bulk_create"
     records = assert_bulk_post(
-        lambda: api.create_multiple_qc_gene_coverage(vg_objects["qc_gene_coverage_list"]),
+        lambda: vg4_api.create_multiple_qc_gene_coverage(vg_objects["qc_gene_coverage_list"]),
         url,
         n=len(vg_objects["qc_gene_coverage_list"])
     )

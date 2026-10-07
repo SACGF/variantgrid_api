@@ -1,9 +1,12 @@
 """Tests for MockVariantGridAPI — verifies call recording, return-value
 overrides, and assertion helpers work correctly."""
+import dataclasses
+
 import pytest
 
 from variantgrid_api.api_client import UnsupportedFeaturePolicy, UnsupportedFeatureError
-from variantgrid_api.data_models import ServerCapabilities, ServerFeature, UploadFileType
+from variantgrid_api.data_models import ServerCapabilities, ServerFeature, UploadFileType, AlignmentFile, \
+    SequencingFile, SingleSampleVCF
 from variantgrid_api.mock_variantgrid_api import MockVariantGridAPI
 
 
@@ -267,3 +270,22 @@ def test_mock_legacy_skips_annotation_flow():
     assert mock_api.annotate_vcf("input.vcf") is None
     mock_api.assert_not_called("poll_upload_status")
     mock_api.assert_not_called("annotate_vcf")
+
+
+def test_mock_cram_to_legacy_server_follows_policy(vg_objects):
+    """ SACGF/variantgrid_api#27 - same CRAM gating as VariantGridAPI.create_sequencing_data """
+    sf = SequencingFile("s1", alignment_files=[AlignmentFile("/data/s1.cram")],
+                        vcf_files=[SingleSampleVCF("/data/s1.vcf.gz")])
+    lookup = vg_objects["sample_sheet_lookup"]
+    with pytest.raises(UnsupportedFeatureError):
+        MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY).create_sequencing_data(lookup, [sf])
+
+    mock_api = MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY,
+                                  unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    mock_api.create_sequencing_data(lookup, [sf])
+    mock_api.assert_called_once("create_sequencing_data")
+    # Current server and old-style bam_file: no gating
+    MockVariantGridAPI().create_sequencing_data(lookup, [sf])
+    with pytest.warns(DeprecationWarning):
+        old_style = dataclasses.replace(sf, alignment_files=None, bam_file=AlignmentFile("/data/s1.cram"))
+    MockVariantGridAPI(capabilities=ServerCapabilities.LEGACY).create_sequencing_data(lookup, [old_style])
