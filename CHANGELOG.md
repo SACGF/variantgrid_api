@@ -1,3 +1,12 @@
+## [1.10.0] - 2026-10-13
+
+### Added
+
+- [`VariantGridAPI.link_sequencing_sample_extractions(sample_sheet_lookup, extractions)`](https://github.com/SACGF/variantgrid_api/issues/32) - links a sample sheet's sequencing samples to their extractions in one call, instead of one `link_sequencing_sample_extraction()` POST per sample. `extractions` maps each sequencing sample's name (`SequencingSampleLookup.sample_name`) to its extraction reference (a bare string or `ExternalReference`, as the single call takes). Posts `{"sample_sheet": {sequencing_run, hash}, "links": [{sample_name, extraction}, ...]}` to `seqauto/api/v1/sequencing_sample/link_extractions` and returns the server's list of per-sample `{sequencing_sample, match_status, match_error, extraction}` dicts in the order given. `match_status` is per sample: an extraction the server doesn't have yet is `Pending` (HTTP 202) for that sample only and attaches itself once created; a sample name not on the sheet is a 400 for the whole batch. Validation names the sample on failure (`extractions['sample_1']: is None`). Needs a server at or after SACGF/variantgrid#2176.
+  - `ServerFeature.LINK_EXTRACTIONS_BULK` (`"link_extractions_bulk"`). Against a server without it but with `link_extraction`, the call falls back to one `link_sequencing_sample_extraction()` per sample and returns the collected results, so pipelines can switch to the bulk call unconditionally. `unsupported_feature_policy` applies only when the server has neither feature.
+  - `MockVariantGridAPI.link_sequencing_sample_extractions()` records the call and returns one `Matched` dict per sample; with capabilities lacking `link_extractions_bulk` it makes (and records) the single-sample calls instead, as the real client does.
+  - `examples/example_haem_20_999.py` now creates a patient, specimen and extraction per sample and links the sheet's samples with the bulk call. `link_sequencing_sample_extraction()` stays for late links and the two-arm TSO 500 flow (`examples/example_tso500.py`).
+
 ## [1.9.0] - 2026-10-07
 
 ### Added

@@ -5,11 +5,12 @@ from datetime import datetime
 from hashlib import md5
 from typing import List, Dict
 
-from variantgrid_api.api_client import VariantGridAPI
+from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
 from variantgrid_api.data_models import EnrichmentKit, SequencerModel, Sequencer, SequencingRun, SequencingSample, \
     SampleSheet, \
     JointCalledVCF, VariantCaller, SampleSheetLookup, Aligner, SingleSampleVCF, AlignmentFile, SequencingFile, \
-    SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer
+    SequencingSampleLookup, QC, QCGeneList, QCExecStats, QCGeneCoverage, Manufacturer, Patient, Specimen, \
+    Extraction, NucleicAcid
 
 
 def parse_args():
@@ -106,6 +107,18 @@ def test_api(server, api_token, step=None):
         sequencing_samples=sequencing_samples)
 
     sample_sheet_lookup = SampleSheetLookup.from_sample_sheet(sample_sheet)
+
+    # Accessioning - which patient / specimen / extraction each library came from. The extractions are
+    # linked to the sample sheet's sequencing samples in one call, keyed on sample name
+    patients = [Patient(patient_code="C0000001"), Patient(patient_code="C0000002")]
+    specimens = [Specimen(patient="C0000001", reference_id="2600000001"),
+                 Specimen(patient="C0000002", reference_id="2600000002")]
+    extractions = [Extraction(specimen="2600000001", reference_id="2600000001C", nucleic_acid_source=NucleicAcid.DNA),
+                   Extraction(specimen="2600000002", reference_id="2600000002C", nucleic_acid_source=NucleicAcid.DNA)]
+    extraction_by_sample_name = {
+        "fake_sample_1": "2600000001C",
+        "fake_sample_2": "2600000002C",
+    }
 
     variant_caller_var_dict = VariantCaller(name="VarDict", version="1.8.2")
     combo_vcf_filename = seq_run_path("2_variants/Haem_20_999_201231_M02027_0112_000000000_JFT79.vardict.hg38.vcf.gz")
@@ -207,15 +220,25 @@ def test_api(server, api_token, step=None):
     #########################
     # Call API
 
-    vg_api = VariantGridAPI(server, api_token)
+    # SKIP: the patient / extraction calls need a VG4 server - an older one logs and skips them
+    vg_api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
 
     API_STEPS = {
+        # Accessioning - a specimen needs its patient, an extraction its specimen
+        "patients": lambda: [vg_api.create_patient(p) for p in patients],
+        "specimens": lambda: [vg_api.create_specimen(s) for s in specimens],
+        "extractions": lambda: [vg_api.create_extraction(e) for e in extractions],
+        # Sequencing
         "experiment": lambda: vg_api.create_experiment(experiment),
         "enrichment_kit": lambda: vg_api.create_enrichment_kit(enrichment_kit),
         "sequencer_model": lambda: vg_api.create_sequencer_model(sequencer_model),
         "sequencer": lambda: vg_api.create_sequencer(sequencer),
         "sequencing_run": lambda: vg_api.create_sequencing_run(sequencing_run),
         "sample_sheet": lambda: vg_api.create_sample_sheet(sample_sheet),
+        # One call for the whole sheet. A sample whose extraction isn't there yet is 'Pending' (HTTP 202) and
+        # links itself once the extraction is created. Falls back to a call per sample on an older server
+        "link_extractions": lambda: vg_api.link_sequencing_sample_extractions(sample_sheet_lookup,
+                                                                              extraction_by_sample_name),
         "joint_called_vcf": lambda: vg_api.create_joint_called_vcf(
             joint_called_vcf),
         "sequencing_data": lambda: vg_api.create_sequencing_data(sample_sheet_lookup, sequencing_files),

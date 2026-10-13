@@ -1,12 +1,16 @@
 """Patient / specimen / extraction, specimen measures, extraction links and upload metadata
 (SACGF/variantgrid_api#20)"""
 import json
+import logging
+import re
 from urllib.parse import urlparse, parse_qs
 
 import pytest
 import responses
 
-from variantgrid_api.data_models import ExternalReference, ExternalPK, Extraction
+from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy, UnsupportedFeatureError
+from variantgrid_api.data_models import ExternalReference, ExternalPK, Extraction, ServerCapabilities, \
+    ServerFeature
 
 
 @pytest.fixture
@@ -139,6 +143,126 @@ def test_link_sequencing_sample_extraction_pending_is_not_an_error(api, server, 
     responses.add(responses.POST, url, json=pending, status=202)
     out = api.link_sequencing_sample_extraction(vg_objects["sequencing_sample_lookup_1"], "2600000001C")
     assert out == pending
+
+
+# ------------------------------------------------------------------ #
+# Linking a sample sheet's sequencing samples in one call (#32)         #
+# ------------------------------------------------------------------ #
+
+def _bulk_url(server):
+    return f"{server}/seqauto/api/v1/sequencing_sample/link_extractions"
+
+
+def _single_url(server):
+    return f"{server}/seqauto/api/v1/sequencing_sample/link_extraction"
+
+
+def _link_result(sample_name, extraction, match_status="Matched"):
+    return {"sequencing_sample": sample_name, "match_status": match_status, "match_error": None,
+            "extraction": extraction if match_status == "Matched" else None}
+
+
+EXTRACTIONS = {"fake_sample_1": "2600000001C", "fake_sample_2": "2600000002C"}
+
+
+@responses.activate
+def test_link_sequencing_sample_extractions(api, server, vg_objects):
+    result = [_link_result("fake_sample_1", "2600000001C"), _link_result("fake_sample_2", "2600000002C")]
+    responses.add(responses.POST, _bulk_url(server), json=result, status=200)
+
+    out = api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], EXTRACTIONS)
+    assert out == result
+    assert len(responses.calls) == 1
+    assert _last_json() == {
+        "sample_sheet": vg_objects["sample_sheet_lookup"].to_dict(),
+        "links": [
+            {"sample_name": "fake_sample_1", "extraction": "2600000001C"},
+            {"sample_name": "fake_sample_2", "extraction": "2600000002C"},
+        ],
+    }
+
+
+@responses.activate
+def test_link_sequencing_sample_extractions_external_reference(api, server, vg_objects):
+    """ Each link takes the same reference forms as the single call """
+    responses.add(responses.POST, _bulk_url(server), json=[], status=200)
+    lims = ExternalReference(code="LIMS-1", external_type="LabNo")
+    api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], {"fake_sample_1": lims})
+    assert _last_json()["links"] == [{"sample_name": "fake_sample_1", "extraction": lims.to_json_value()}]
+
+
+@responses.activate
+def test_link_sequencing_sample_extractions_pending_is_not_an_error(api, server, vg_objects):
+    """ match_status is per sample - a 202 with one 'Pending' still links the others """
+    result = [_link_result("fake_sample_1", "2600000001C"),
+              _link_result("fake_sample_2", None, match_status="Pending")]
+    responses.add(responses.POST, _bulk_url(server), json=result, status=202)
+    assert api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], EXTRACTIONS) == result
+
+
+@pytest.fixture
+def link_extraction_only_api(server, api_token):
+    """ A server from before the bulk endpoint, with just the single-sample one """
+    api = VariantGridAPI(server, api_token)
+    api._capabilities = ServerCapabilities(version="old", features=frozenset([ServerFeature.LINK_EXTRACTION]))
+    return api
+
+
+@responses.activate
+def test_link_sequencing_sample_extractions_falls_back_to_one_call_per_sample(link_extraction_only_api, server,
+                                                                              vg_objects):
+    """ So pipelines can use the bulk call unconditionally - the results are collected in order """
+    api = link_extraction_only_api
+    responses.add(responses.POST, _single_url(server), json=_link_result("fake_sample_1", "2600000001C"), status=200)
+    responses.add(responses.POST, _single_url(server), json=_link_result("fake_sample_2", None, "Pending"), status=202)
+
+    out = api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], EXTRACTIONS)
+    assert out == [_link_result("fake_sample_1", "2600000001C"), _link_result("fake_sample_2", None, "Pending")]
+    assert [c.request.url for c in responses.calls] == [_single_url(server)] * 2
+    sample_sheet = vg_objects["sample_sheet_lookup"].to_dict()
+    assert [json.loads(c.request.body) for c in responses.calls] == [
+        {"sequencing_sample": {"sample_sheet": sample_sheet, "sample_name": "fake_sample_1"},
+         "extraction": "2600000001C"},
+        {"sequencing_sample": {"sample_sheet": sample_sheet, "sample_name": "fake_sample_2"},
+         "extraction": "2600000002C"},
+    ]
+
+
+@responses.activate
+def test_link_sequencing_sample_extractions_policy_applies_only_without_link_extraction(server, api_token,
+                                                                                        vg_objects, caplog):
+    """ unsupported_feature_policy applies only when the server has neither feature """
+    legacy = ServerCapabilities.LEGACY
+    api = VariantGridAPI(server, api_token)
+    api._capabilities = legacy
+    with pytest.raises(UnsupportedFeatureError):
+        api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], EXTRACTIONS)
+
+    skip_api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    skip_api._capabilities = legacy
+    with caplog.at_level(logging.WARNING):
+        assert skip_api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], EXTRACTIONS) is None
+    assert "Skipping" in caplog.text
+    assert not responses.calls
+
+
+@pytest.mark.parametrize("extractions, message", [
+    ({}, "extractions: empty"),
+    ({"fake_sample_1": "2600000001C", "fake_sample_2": None}, "extractions['fake_sample_2']: is None"),
+    ({"fake_sample_1": ""}, "extractions['fake_sample_1']: empty string"),
+    ({"": "2600000001C"}, "extractions: sample name: empty string"),
+])
+@responses.activate
+def test_link_sequencing_sample_extractions_validation_names_the_sample(api, vg_objects, extractions, message):
+    with pytest.raises(ValueError, match=re.escape(message)):
+        api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], extractions)
+    assert not responses.calls
+
+
+@responses.activate
+def test_link_sequencing_sample_extractions_requires_sample_sheet_lookup(api, vg_objects):
+    with pytest.raises(ValueError, match="sample_sheet_lookup: is None"):
+        api.link_sequencing_sample_extractions(None, EXTRACTIONS)
 
 
 # ------------------------------------------------------------------ #
