@@ -28,7 +28,7 @@ def capabilities_json():
     return {
         "version": "4.0.0",
         "git_hash": "2130cffe0",
-        "features": ["patients", "link_extraction", "upload_status",
+        "features": ["patients", "link_extraction", "link_extractions_bulk", "upload_status",
                      "joint_called_vcf_cross_run", "upload_metadata", "cram_alignment_files", "alignment_files"],
         "upload_file_types": ["vcf", "gene_coverage", "dragen_tso500_all_fusions",
                               "dragen_tso500_combined_variant_output", "dragen_tso500_metrics_output",

@@ -69,6 +69,21 @@ api.upload_file("sample.vcf.gz", path=None,
 A bare string names a record by its local reference. Use `ExternalReference(code=..., external_type=...)` to
 name it by a LIMS identifier instead. See `examples/example_tso500.py` for a full run.
 
+Once the sample sheet is registered, link its sequencing samples to their extractions in one call, keyed on
+sample name (what `SequencingSampleLookup.sample_name` holds):
+
+```
+api.link_sequencing_sample_extractions(sample_sheet_lookup, {"sample_1": "2600000001C",
+                                                             "sample_2": "2600000002C"})
+```
+
+It returns a list with one `{"sequencing_sample", "match_status", "match_error", "extraction"}` per sample. An
+extraction the server doesn't have yet is `Pending` for that sample only (HTTP 202) and attaches itself once the
+extraction is created; a sample name that isn't on the sheet is a 400 for the whole batch. On a server from
+before SACGF/variantgrid#2176 (no `link_extractions_bulk` feature) the client makes one
+`link_sequencing_sample_extraction` call per sample instead, so pipelines can use the bulk call unconditionally.
+`link_sequencing_sample_extraction` is still there for a single late link. See `examples/example_haem_20_999.py`.
+
 ## BAMs and CRAMs
 
 A sequencing sample can have several alignment files, eg a BAM and its recalibrated BAM, or a BAM plus a CRAM.
@@ -93,13 +108,15 @@ file as `bam_file`, and a QC's first alignment file as its `bam_file`. A CRAM th
 Servers of different ages accept different calls. The client asks the server which features it has
 (`GET api/v1/capabilities`, fetched once on first use), and each call that needs a newer server
 checks that list first: the patient / specimen / extraction calls, specimen measures,
-`link_sequencing_sample_extraction`, the annotate flow (`poll_upload_status`, `wait_for_annotation`,
-`download_annotated`, `annotate_vcf`), and `upload_file` with `metadata` or `file_type`. A server without the
-capabilities endpoint counts as legacy and reports no features.
+`link_sequencing_sample_extraction` and `link_sequencing_sample_extractions`, the annotate flow
+(`poll_upload_status`, `wait_for_annotation`, `download_annotated`, `annotate_vcf`), and `upload_file` with
+`metadata` or `file_type`. A server without the capabilities endpoint counts as legacy and reports no features.
 
 By default an unsupported call raises `UnsupportedFeatureError`. To run the same code against old and new
-servers, skip those calls instead: they log a warning and return `None`. `upload_file` is the exception: on a
-server without upload metadata it drops the `metadata` and still uploads the file.
+servers, skip those calls instead: they log a warning and return `None`. Two calls downgrade rather than skip
+when the server has the older form of the feature: `upload_file` on a server without upload metadata drops the
+`metadata` and still uploads the file, and `link_sequencing_sample_extractions` on a server with only
+`link_extraction` makes one call per sample.
 
 ```
 from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
@@ -142,10 +159,10 @@ specimen measures. See `examples/example_tso500.py` for a full run.
 ## Permission to write sequencing data
 
 Posts to the server's `seqauto/api/` endpoints - the sequencing `create_*` calls from `create_experiment` through
-`create_sequencing_data` and the QC calls, and `link_sequencing_sample_extraction` - need a superuser's API token,
-or one belonging to a member of the server's SeqAuto write group (`seqauto_api_write` unless the server's
-`SEQAUTO_API_WRITE_GROUP` setting says otherwise). Anyone else gets a 403 (`requests.HTTPError`). Reads, such as
-`sequencing_run_has_vcf()`, need only a valid token.
+`create_sequencing_data` and the QC calls, and the `link_sequencing_sample_extraction(s)` calls - need a
+superuser's API token, or one belonging to a member of the server's SeqAuto write group (`seqauto_api_write`
+unless the server's `SEQAUTO_API_WRITE_GROUP` setting says otherwise). Anyone else gets a 403
+(`requests.HTTPError`). Reads, such as `sequencing_run_has_vcf()`, need only a valid token.
 
 ## Testing
 

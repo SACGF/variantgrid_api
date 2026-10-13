@@ -520,6 +520,7 @@ class ServerFeature(_ServerName):
         variantgrid/views_rest.py). An older server just doesn't list a newer one """
     PATIENTS = "patients"
     LINK_EXTRACTION = "link_extraction"
+    LINK_EXTRACTIONS_BULK = "link_extractions_bulk"  # sequencing_sample/link_extractions (SACGF/variantgrid#2176)
     UPLOAD_STATUS = "upload_status"
     JOINT_CALLED_VCF_CROSS_RUN = "joint_called_vcf_cross_run"
     UPLOAD_METADATA = "upload_metadata"

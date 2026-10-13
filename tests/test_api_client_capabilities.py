@@ -140,6 +140,8 @@ def _gated_calls(vg_objects, vcf):
         "create_extraction": lambda api: api.create_extraction(vg_objects["dna_extraction"]),
         "link_sequencing_sample_extraction": lambda api: api.link_sequencing_sample_extraction(
             vg_objects["sequencing_sample_lookup_1"], "2600000001C"),
+        "link_sequencing_sample_extractions": lambda api: api.link_sequencing_sample_extractions(
+            vg_objects["sample_sheet_lookup"], {"fake_sample_1": "2600000001C"}),
         "upload_file_file_type": lambda api: api.upload_file(vcf, path=None, file_type=CVO),
         "poll_upload_status": lambda api: api.poll_upload_status(uploaded_file_id=1),
         "wait_for_annotation": lambda api: api.wait_for_annotation(uploaded_file_id=1, sleep=lambda _: None),
@@ -149,6 +151,7 @@ def _gated_calls(vg_objects, vcf):
 
 
 GATED = ["create_patient", "create_specimen", "create_extraction", "link_sequencing_sample_extraction",
+         "link_sequencing_sample_extractions",
          "upload_file_file_type",
          "poll_upload_status", "wait_for_annotation", "download_annotated", "annotate_vcf"]
 

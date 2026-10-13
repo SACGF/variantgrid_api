@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
 
 from variantgrid_api.api_client import UnsupportedFeaturePolicy, UnsupportedFeatureError
-from variantgrid_api.data_models import reference_json, ServerCapabilities, ServerFeature, UploadFileType
+from variantgrid_api.data_models import reference_json, SequencingSampleLookup, ServerCapabilities, \
+    ServerFeature, UploadFileType
 
 _UNSET = object()
 
@@ -218,6 +219,24 @@ class MockVariantGridAPI:
             "match_error": None,
             "extraction": str(reference_json(extraction_reference)),
         })
+
+    def link_sequencing_sample_extractions(self, sample_sheet_lookup, extractions):
+        """ As the real client, a server without 'link_extractions_bulk' gets one
+            link_sequencing_sample_extraction call per sample - those are what's recorded, not this call """
+        if not self.supports(ServerFeature.LINK_EXTRACTIONS_BULK):
+            if not self._require(ServerFeature.LINK_EXTRACTION):
+                return None
+            return [self.link_sequencing_sample_extraction(
+                        SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup, sample_name=sample_name),
+                        extraction_reference)
+                    for sample_name, extraction_reference in extractions.items()]
+        self._record("link_sequencing_sample_extractions", sample_sheet_lookup, extractions)
+        return self._ret("link_sequencing_sample_extractions", [{
+            "sequencing_sample": sample_name,
+            "match_status": "Matched",
+            "match_error": None,
+            "extraction": str(reference_json(extraction_reference)),
+        } for sample_name, extraction_reference in extractions.items()])
 
     def upload_file(self, filename, path=_UNSET, metadata=None, file_type=None):
         if metadata and not self.supports(ServerFeature.UPLOAD_METADATA):

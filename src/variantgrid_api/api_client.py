@@ -7,7 +7,7 @@ import urllib
 import warnings
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Callable, Union
+from typing import Dict, List, Optional, Callable, Union
 
 import requests
 
@@ -437,6 +437,44 @@ class VariantGridAPI:
             "extraction": reference_json(extraction_reference),
         }
         return self._post("seqauto/api/v1/sequencing_sample/link_extraction", json_data)
+
+    def link_sequencing_sample_extractions(self, sample_sheet_lookup: SampleSheetLookup,
+                                           extractions: Dict[str, ReferenceLike]) -> Optional[List[dict]]:
+        """ link_sequencing_sample_extraction() for a whole sample sheet in one call. extractions maps each
+            sequencing sample's name (SequencingSampleLookup.sample_name) to its extraction reference.
+
+            Returns one {"sequencing_sample", "match_status", "match_error", "extraction"} per sample, in the
+            order given. match_status is per sample: an extraction the server doesn't have yet is 'Pending'
+            (the response is a 202) and attaches itself once created, without affecting the others. A sample
+            name that isn't on the sample sheet is a 400 for the whole batch - nothing is linked.
+
+            Needs ServerFeature.LINK_EXTRACTIONS_BULK (SACGF/variantgrid#2176). A server with only
+            ServerFeature.LINK_EXTRACTION gets one link_sequencing_sample_extraction() call per sample and
+            the results are collected, so pipelines can call this unconditionally. unsupported_feature_policy
+            applies only when the server has neither feature. """
+        if not self.supports(ServerFeature.LINK_EXTRACTIONS_BULK) and not self._require(ServerFeature.LINK_EXTRACTION):
+            return None
+        self._validate_object("sample_sheet_lookup", sample_sheet_lookup)
+        if not extractions:
+            self.validation_handler("extractions: empty")
+        for sample_name, extraction_reference in extractions.items():
+            self._validate_string("extractions: sample name", sample_name)
+            self._validate_reference(f"extractions['{sample_name}']", extraction_reference)
+
+        if not self.supports(ServerFeature.LINK_EXTRACTIONS_BULK):
+            self.logger.info("Server doesn't support feature '%s' - linking %d sequencing sample(s) one at a time",
+                             ServerFeature.LINK_EXTRACTIONS_BULK, len(extractions))
+            return [self.link_sequencing_sample_extraction(
+                        SequencingSampleLookup(sample_sheet_lookup=sample_sheet_lookup, sample_name=sample_name),
+                        extraction_reference)
+                    for sample_name, extraction_reference in extractions.items()]
+
+        json_data = {
+            "sample_sheet": sample_sheet_lookup.to_dict(),
+            "links": [{"sample_name": sample_name, "extraction": reference_json(extraction_reference)}
+                      for sample_name, extraction_reference in extractions.items()],
+        }
+        return self._post("seqauto/api/v1/sequencing_sample/link_extractions", json_data)
 
     def upload_file(self, filename: str, path=_UNSET, metadata: Optional[dict] = None,
                     file_type: Optional[Union[UploadFileType, str]] = None):

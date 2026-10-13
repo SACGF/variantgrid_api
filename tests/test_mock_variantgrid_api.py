@@ -208,6 +208,34 @@ def test_mock_link_sequencing_sample_extraction_pending_override(mock_api, vg_ob
     mock_api.assert_called_once("link_sequencing_sample_extraction")
 
 
+def test_mock_link_sequencing_sample_extractions(mock_api, vg_objects):
+    extractions = {"fake_sample_1": "2600000001C", "fake_sample_2": "2600000002C"}
+    result = mock_api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], extractions)
+    assert [r["sequencing_sample"] for r in result] == ["fake_sample_1", "fake_sample_2"]
+    assert all(r["match_status"] == "Matched" for r in result)
+    mock_api.assert_called_once("link_sequencing_sample_extractions")
+    mock_api.assert_not_called("link_sequencing_sample_extraction")
+    assert mock_api.get_calls("link_sequencing_sample_extractions") == [
+        ((vg_objects["sample_sheet_lookup"], extractions), {})]
+
+    mock_api.set_return("link_sequencing_sample_extractions", [{"match_status": "Pending"}])
+    assert mock_api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], extractions) == [
+        {"match_status": "Pending"}]
+
+
+def test_mock_link_sequencing_sample_extractions_falls_back_without_bulk_feature(vg_objects):
+    """ A server with only link_extraction gets (and records) one single-sample call per sample """
+    mock_api = MockVariantGridAPI(capabilities=ServerCapabilities(
+        version="old", features=frozenset([ServerFeature.LINK_EXTRACTION])))
+    extractions = {"fake_sample_1": "2600000001C", "fake_sample_2": "2600000002C"}
+    result = mock_api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"], extractions)
+    assert [r["sequencing_sample"] for r in result] == ["fake_sample_1", "fake_sample_2"]
+    mock_api.assert_not_called("link_sequencing_sample_extractions")
+    calls = mock_api.get_calls("link_sequencing_sample_extraction")
+    assert [(lookup.sample_name, extraction) for (lookup, extraction), _ in calls] == list(extractions.items())
+    assert all(lookup.sample_sheet_lookup == vg_objects["sample_sheet_lookup"] for (lookup, _), _ in calls)
+
+
 def test_mock_upload_file_records_metadata_only_when_sent(mock_api):
     mock_api.upload_file("a.vcf")
     mock_api.upload_file("b.vcf", path=None, metadata={"genome_build": "GRCh37"})
@@ -246,9 +274,12 @@ def test_mock_legacy_skips_under_skip(vg_objects):
     assert not mock_api.supports("patients")
     assert mock_api.create_patient(vg_objects["patient"]) is None
     assert mock_api.link_sequencing_sample_extraction(vg_objects["sequencing_sample_lookup_1"], "2600000001C") is None
+    assert mock_api.link_sequencing_sample_extractions(vg_objects["sample_sheet_lookup"],
+                                                       {"fake_sample_1": "2600000001C"}) is None
     assert mock_api.upload_file("cvo.tsv", path=None, file_type="dragen_tso500_combined_variant_output") is None
     mock_api.assert_not_called("create_patient")
     mock_api.assert_not_called("link_sequencing_sample_extraction")
+    mock_api.assert_not_called("link_sequencing_sample_extractions")
     mock_api.assert_not_called("upload_file")
 
     # Metadata is dropped but the file still uploads
