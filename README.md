@@ -110,10 +110,12 @@ file as `bam_file`, and a QC's first alignment file as its `bam_file`. A CRAM th
 
 Servers of different ages accept different calls. The client asks the server which features it has
 (`GET api/v1/capabilities`, fetched once on first use), and each call that needs a newer server
-checks that list first: the patient / specimen / extraction calls, specimen measures,
+checks that list first: the patient / specimen / extraction calls,
 `link_sequencing_sample_extraction` and `link_sequencing_sample_extractions`, the annotate flow
 (`poll_upload_status`, `wait_for_annotation`, `download_annotated`, `annotate_vcf`), and `upload_file` with
-`metadata` or `file_type`. A server without the capabilities endpoint counts as legacy and reports no features.
+`metadata`, `file_type` or `required_features`. A server without the capabilities endpoint counts as legacy and
+reports no features. From SACGF/variantgrid#2732 the endpoint is public, so `VariantGridAPI(server, None)` can
+probe a server before you have a token.
 
 By default an unsupported call raises `UnsupportedFeatureError`. To run the same code against old and new
 servers, skip those calls instead: they log a warning and return `None`. Two calls downgrade rather than skip
@@ -123,6 +125,7 @@ when the server has the older form of the feature: `upload_file` on a server wit
 
 ```
 from variantgrid_api.api_client import VariantGridAPI, UnsupportedFeaturePolicy
+from variantgrid_api.data_models import ServerFeature
 
 api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
 api.create_patient(patient)        # skipped on a server without patients
@@ -130,6 +133,9 @@ api.create_patient(patient)        # skipped on a server without patients
 # Uploads only when the server has an importer for this file type
 api.upload_file("sample_CombinedVariantOutput.tsv", path=None,
                 file_type="dragen_tso500_combined_variant_output")
+
+# An SV/CNV VCF with symbolic alts (<DEL>, <DUP>, <INV>, <CNV>) - only a server that imports them (not VG3)
+api.upload_file("sample.sv.vcf.gz", path=None, required_features=[ServerFeature.SYMBOLIC_ALTS])
 ```
 
 Where the fallback isn't simply "do nothing", branch on `api.supports("feature")` or
