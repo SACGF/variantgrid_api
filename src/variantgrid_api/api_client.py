@@ -752,7 +752,9 @@ class VariantGridAPI:
 
             Chains upload_file -> wait_for_annotation -> download_annotated and returns the Path written.
             Needs server feature 'upload_status', and for compression='none' 'annotated_download_compression'
-            (see download_annotated) - both checked before uploading """
+            (see download_annotated) - both checked before uploading.
+            No required_features (unlike upload_file): every server with 'upload_status' also imports symbolic alts,
+            so an SV/CNV VCF needs no SYMBOLIC_ALTS check here """
         if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
         compression = self._download_compression(export_type, compression)
