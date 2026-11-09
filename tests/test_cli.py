@@ -99,6 +99,21 @@ def test_csv_export_type(vcf, tmp_path):
 
 
 @responses.activate
+def test_dest_with_trailing_slash_creates_dir(vcf, tmp_path):
+    """ '-o results/' that doesn't exist yet is created, and the download keeps the server's filename (#35) """
+    _add_capabilities()
+    responses.add(responses.GET, STATUS_RE, json={"annotation_complete": True, "error": None}, status=200)
+    responses.add(responses.GET, DOWNLOAD_RE, body=b"zip", status=200,
+                  headers={"Content-Disposition": 'attachment; filename="out.csv.zip"'})
+
+    results = tmp_path / "results"
+    rc = cli.main(_argv(vcf, "--export-type", "csv", "-o", f"{results}/"))
+
+    assert rc == cli.EXIT_OK
+    assert (results / "out.csv.zip").read_bytes() == b"zip"
+
+
+@responses.activate
 def test_csv_compression_none(vcf, tmp_path):
     """ --compression none downloads a plain CSV (#36) """
     _add_capabilities(("upload_status", "annotated_download_compression"))

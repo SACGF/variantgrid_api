@@ -176,6 +176,43 @@ def test_download_annotated_uses_attachment_name_in_dir(api, server, tmp_path):
 
 
 @responses.activate
+def test_download_annotated_trailing_slash_creates_dir(api, server, tmp_path):
+    """ 'results/' names a directory even when it doesn't exist yet (#35) """
+    url = f"{server}/upload/api/v1/download/123/csv"
+    responses.add(responses.GET, url, body=b"zipbytes", status=200,
+                  headers={"Content-Disposition": 'attachment; filename="cohort.csv.zip"'})
+
+    dest_dir = tmp_path / "results" / "nested"
+    out = api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=f"{dest_dir}/", sleep=_no_sleep)
+    assert out == dest_dir / "cohort.csv.zip"
+    assert out.read_bytes() == b"zipbytes"
+
+
+@responses.activate
+def test_download_annotated_new_path_without_slash_is_a_file(api, server, tmp_path):
+    """ Without a trailing slash a path that doesn't exist is still the file to write """
+    url = f"{server}/upload/api/v1/download/123/csv"
+    responses.add(responses.GET, url, body=b"zipbytes", status=200,
+                  headers={"Content-Disposition": 'attachment; filename="cohort.csv.zip"'})
+
+    dest = tmp_path / "results"
+    out = api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=str(dest), sleep=_no_sleep)
+    assert out == dest
+    assert dest.is_file()
+
+
+@responses.activate
+def test_download_annotated_server_error_does_not_create_dir(api, server, tmp_path):
+    url = f"{server}/upload/api/v1/download/123/vcf"
+    responses.add(responses.GET, url, json={"error": "Export templates not configured"}, status=400)
+
+    dest_dir = tmp_path / "results"
+    with pytest.raises(Exception):
+        api.download_annotated(uploaded_file_id=123, dest_path=f"{dest_dir}/", sleep=_no_sleep)
+    assert not dest_dir.exists()
+
+
+@responses.activate
 def test_download_annotated_follows_202_generating(api, server, tmp_path):
     url = f"{server}/upload/api/v1/download/123/vcf"
     responses.add(responses.GET, url, json={"status": "generating", "progress": 0.5}, status=202)
