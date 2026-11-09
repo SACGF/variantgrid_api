@@ -3,7 +3,9 @@ import gzip
 import pytest
 import responses
 
-from variantgrid_api.api_client import AnnotationError, VariantGridAPI
+from variantgrid_api.api_client import AnnotationError, VariantGridAPI, UnsupportedFeatureError, \
+    UnsupportedFeaturePolicy
+from variantgrid_api.data_models import ServerCapabilities
 
 
 @pytest.fixture
@@ -201,6 +203,97 @@ def test_download_annotated_raises_on_server_error(api, server, tmp_path):
 
     with pytest.raises(Exception):
         api.download_annotated(uploaded_file_id=123, dest_path=tmp_path, sleep=_no_sleep)
+
+
+@responses.activate
+def test_download_annotated_default_sends_no_compression(api, server, tmp_path):
+    """ The default (zip) request is exactly what older clients sent (#36) """
+    url = f"{server}/upload/api/v1/download/123/csv"
+    responses.add(responses.GET, url, body=b"zipbytes", status=200)
+
+    out = api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=tmp_path, sleep=_no_sleep)
+    assert "compression" not in responses.calls[-1].request.url
+    assert out == tmp_path / "download.csv.zip"
+
+
+@responses.activate
+def test_download_annotated_plain_csv(api, server, tmp_path):
+    """ compression='none' asks for a plain CSV (SACGF/variantgrid#2368) """
+    url = f"{server}/upload/api/v1/download/123/csv"
+    responses.add(responses.GET, url, body=b"a,b\n", status=200, content_type="text/csv",
+                  match=[responses.matchers.query_param_matcher({"compression": "none"})])
+
+    out = api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=tmp_path,
+                                 compression="none", sleep=_no_sleep)
+    assert out == tmp_path / "download.csv"  # no Content-Disposition - fallback name has no .zip
+    assert out.read_bytes() == b"a,b\n"
+
+
+@responses.activate
+def test_download_annotated_plain_csv_keeps_query_while_generating(api, server, tmp_path):
+    url = f"{server}/upload/api/v1/download/123/csv"
+    responses.add(responses.GET, url, json={"status": "generating"}, status=202)
+    responses.add(responses.GET, url, body=b"a,b\n", status=200,
+                  headers={"Content-Disposition": 'attachment; filename="cohort.csv"'})
+
+    out = api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=tmp_path,
+                                 compression="none", poll_interval=0, sleep=_no_sleep)
+    assert out == tmp_path / "cohort.csv"
+    assert all("compression=none" in c.request.url for c in responses.calls)
+
+
+def test_download_annotated_plain_csv_old_server_raises(server, api_token, capabilities_json):
+    capabilities_json["features"].remove("annotated_download_compression")
+    api = VariantGridAPI(server, api_token)
+    api._capabilities = ServerCapabilities.from_json(capabilities_json)
+    with pytest.raises(UnsupportedFeatureError):
+        api.download_annotated(uploaded_file_id=123, export_type="csv", compression="none")
+
+
+@responses.activate
+def test_download_annotated_plain_csv_old_server_skip_downloads_zip(server, api_token, capabilities_json, tmp_path):
+    capabilities_json["features"].remove("annotated_download_compression")
+    api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    api._capabilities = ServerCapabilities.from_json(capabilities_json)
+    url = f"{server}/upload/api/v1/download/123/csv"
+    responses.add(responses.GET, url, body=b"zipbytes", status=200)
+
+    out = api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=tmp_path,
+                                 compression="none", sleep=_no_sleep)
+    assert "compression" not in responses.calls[-1].request.url
+    assert out == tmp_path / "download.csv.zip"
+
+
+@pytest.mark.parametrize("export_type, compression", [("vcf", "none"), ("csv", "bz2"), ("vcf", "gzip")])
+def test_download_annotated_rejects_bad_compression(api, export_type, compression):
+    with pytest.raises(ValueError):
+        api.download_annotated(uploaded_file_id=123, export_type=export_type, compression=compression)
+
+
+def test_annotate_vcf_checks_compression_before_upload(server, api_token, capabilities_json, tmp_path):
+    """ Raises before uploading - no request is made (responses isn't active, so one would fail) """
+    capabilities_json["features"].remove("annotated_download_compression")
+    api = VariantGridAPI(server, api_token)
+    api._capabilities = ServerCapabilities.from_json(capabilities_json)
+    src = tmp_path / "input.vcf"
+    src.write_text("##fileformat=VCFv4.2\n")
+    with pytest.raises(UnsupportedFeatureError):
+        api.annotate_vcf(str(src), export_type="csv", compression="none")
+
+
+@responses.activate
+def test_annotate_vcf_plain_csv(api, server, tmp_path):
+    responses.add(responses.POST, f"{server}/upload/api/v1/file_upload", json={"uploaded_file_id": 456}, status=200)
+    responses.add(responses.GET, f"{server}/upload/api/v1/upload_status/456",
+                  json={"annotation_complete": True, "error": None}, status=200)
+    responses.add(responses.GET, f"{server}/upload/api/v1/download/456/csv", body=b"a,b\n", status=200,
+                  match=[responses.matchers.query_param_matcher({"compression": "none"})])
+    src = tmp_path / "input.vcf"
+    src.write_text("##fileformat=VCFv4.2\n")
+
+    out = api.annotate_vcf(str(src), export_type="csv", compression="none", dest_path=tmp_path,
+                           poll_interval=0, sleep=_no_sleep)
+    assert out == tmp_path / "download.csv"
 
 
 def test_download_annotated_rejects_bad_export_type(api):

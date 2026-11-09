@@ -99,6 +99,37 @@ def test_csv_export_type(vcf, tmp_path):
 
 
 @responses.activate
+def test_csv_compression_none(vcf, tmp_path):
+    """ --compression none downloads a plain CSV (#36) """
+    _add_capabilities(("upload_status", "annotated_download_compression"))
+    responses.add(responses.GET, STATUS_RE, json={"annotation_complete": True, "error": None}, status=200)
+    responses.add(responses.GET, re.compile(DOWNLOAD_RE.pattern.rstrip("$") + r"\?compression=none$"),
+                  body=b"a,b\n", status=200, headers={"Content-Disposition": 'attachment; filename="out.csv"'})
+
+    rc = cli.main(_argv(vcf, "--export-type", "csv", "--compression", "none", "-o", str(tmp_path)))
+
+    assert rc == cli.EXIT_OK
+    assert (tmp_path / "out.csv").read_bytes() == b"a,b\n"
+
+
+@responses.activate
+def test_csv_compression_none_old_server_is_error_before_upload(vcf, capsys):
+    _add_capabilities()
+
+    rc = cli.main(_argv(vcf, "--export-type", "csv", "--compression", "none"))
+
+    assert rc == cli.EXIT_ERROR
+    assert "can't send a plain CSV" in capsys.readouterr().err
+    assert [c.request.url for c in responses.calls] == [CAPABILITIES_URL]
+
+
+def test_vcf_compression_none_is_error(vcf, capsys):
+    rc = cli.main(_argv(vcf, "--compression", "none"))
+    assert rc == cli.EXIT_ERROR
+    assert "only to --export-type csv" in capsys.readouterr().err
+
+
+@responses.activate
 def test_wait_uploads_polls_then_downloads(vcf, tmp_path):
     """--wait on a new file: upload, poll until complete, then download - no external loop."""
     _add_capabilities()
