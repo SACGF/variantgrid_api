@@ -137,17 +137,25 @@ def test_api(server, api_token, step=None):
         "link_dna_extraction": lambda: vg_api.link_sequencing_sample_extraction(dna_sequencing_sample, dna_reference),
         "link_rna_extraction": lambda: vg_api.link_sequencing_sample_extraction(rna_sequencing_sample, rna_reference),
     }
-    # Not VCFs - upload_file only sends these if the server accepts that file type (SKIP logs otherwise)
+    # upload_file only sends these if the server accepts that file type (SKIP logs otherwise). The CNV VCF's
+    # SEGID segments are gene-level CNVs, so it needs that importer rather than symbolic alt support
     UPLOAD_FILE_TYPES = {
+        "cnv": UploadFileType.GENE_LEVEL_CNV_VCF,
         "combined_variant_output": UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT,
         "metrics_output": UploadFileType.DRAGEN_TSO500_METRICS_OUTPUT,
+    }
+    # The exon CNV VCF's <DEL> calls are coordinate SVs with symbolic alts - VG3 can't import them
+    # (SACGF/variantgrid#2732), so they go only to a server that supports symbolic alts
+    REQUIRED_FEATURES = {
+        "exon_cnv": [ServerFeature.SYMBOLIC_ALTS],
     }
     # 4. and 5. Uploads. path=None as these aren't registered SeqAuto VCFs - the metadata names the extraction
     # (or for a run-level file, the run) instead
     for name, (filename, metadata) in uploads.items():
         file_type = UPLOAD_FILE_TYPES.get(name)
-        API_STEPS[f"upload_{name}"] = lambda f=filename, m=metadata, t=file_type: vg_api.upload_file(
-            f, path=None, metadata=m, file_type=t)
+        required_features = REQUIRED_FEATURES.get(name)
+        API_STEPS[f"upload_{name}"] = lambda f=filename, m=metadata, t=file_type, r=required_features: \
+            vg_api.upload_file(f, path=None, metadata=m, file_type=t, required_features=r)
 
     for name, func in API_STEPS.items():
         if step:

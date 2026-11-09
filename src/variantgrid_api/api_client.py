@@ -7,7 +7,7 @@ import urllib
 import warnings
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Callable, Union
+from typing import Dict, Iterable, List, Optional, Callable, Union
 
 import requests
 
@@ -63,7 +63,9 @@ class VariantGridAPI:
                  unsupported_feature_policy=UnsupportedFeaturePolicy.ERROR
     ):
         self.server = server
-        self.headers = {"Authorization": f"Token {api_token}"}
+        # api_token=None sends no Authorization header - enough for the public capabilities endpoint
+        # (SACGF/variantgrid#2732); everything else needs a token
+        self.headers = {"Authorization": f"Token {api_token}"} if api_token is not None else {}
         if logger is None:
             logger = logging.getLogger(__name__)
         self.logger = logger
@@ -477,7 +479,8 @@ class VariantGridAPI:
         return self._post("seqauto/api/v1/sequencing_sample/link_extractions", json_data)
 
     def upload_file(self, filename: str, path=_UNSET, metadata: Optional[dict] = None,
-                    file_type: Optional[Union[UploadFileType, str]] = None):
+                    file_type: Optional[Union[UploadFileType, str]] = None,
+                    required_features: Optional[Iterable[Union[ServerFeature, str]]] = None):
         """ Upload a file via multipart POST to upload/api/v1/file_upload.
 
             Returns {"uploaded_file_id": <id>, "sha256_hash": <hash>, ...}; identify the upload by
@@ -505,7 +508,14 @@ class VariantGridAPI:
 
             file_type: the server's name for what this file is, eg UploadFileType.DRAGEN_TSO500_COMBINED_VARIANT_OUTPUT.
                   Not sent (the server decides from the filename) - if given, the upload only happens when
-                  accepts_upload(file_type), so an older server doesn't mis-import it as something else """
+                  accepts_upload(file_type), so an older server doesn't mis-import it as something else
+
+            required_features: server features the file needs, eg [ServerFeature.SYMBOLIC_ALTS] for an SV/CNV VCF
+                  with symbolic alts (<DEL>, <DUP>, <INV>, <CNV>). Not sent - the upload only happens when the
+                  server supports them all, otherwise unsupported_feature_policy applies (SKIP doesn't upload) """
+        for feature in required_features or ():
+            if not self._require(feature):
+                return None
         if metadata and not self.supports(ServerFeature.UPLOAD_METADATA):
             self._unsupported(f"upload metadata for '{filename}' (server doesn't support feature 'upload_metadata')")
             metadata = None

@@ -528,6 +528,9 @@ class ServerFeature(_ServerName):
     ALIGNMENT_FILES = "alignment_files"  # SequencingFile and QC 'alignment_files' (SACGF/variantgrid#2105)
     # Annotated CSV download takes ?compression=zip|none, default zip (SACGF/variantgrid#2368)
     ANNOTATED_DOWNLOAD_COMPRESSION = "annotated_download_compression"
+    # Imports VCFs with symbolic alts (<DEL>, <DUP>, <INV>, <CNV>) as structural variants - VG4, not VG3
+    # (SACGF/variantgrid#2732). Gene-level files have their own UploadFileType instead
+    SYMBOLIC_ALTS = "symbolic_alts"
 
 
 class UploadFileType(_ServerName):
@@ -555,6 +558,9 @@ class UploadFileType(_ServerName):
 @dataclass(frozen=True)
 class ServerCapabilities:
     """ What a server accepts, from GET api/v1/capabilities (SACGF/variantgrid_sapath#443).
+
+        A server at or after SACGF/variantgrid#2732 answers anonymous callers too, without git_hash and with
+        version lacking its commit suffix
 
         A server without that endpoint (404) is LEGACY: version 'legacy', no features, no upload file types """
     LEGACY: ClassVar["ServerCapabilities"]

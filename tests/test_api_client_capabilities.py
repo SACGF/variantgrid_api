@@ -113,6 +113,33 @@ def test_capabilities_other_error_raises(api, capabilities_url):
         api.capabilities
 
 
+@responses.activate
+def test_capabilities_anonymous_response(server, capabilities_url, capabilities_json):
+    """ SACGF/variantgrid#2732 - the endpoint is public. No token sends no Authorization header, and the
+        anonymous response (no git_hash, version without its commit suffix) parses """
+    del capabilities_json["git_hash"]
+    capabilities_json["version"] = "vg4"
+    responses.add(responses.GET, capabilities_url, json=capabilities_json, status=200)
+
+    api = VariantGridAPI(server, None)
+    assert api.supports(ServerFeature.SYMBOLIC_ALTS)
+    assert api.capabilities.git_hash is None
+    assert api.capabilities.version == "vg4"
+    assert "Authorization" not in responses.calls[0].request.headers
+
+
+def test_token_sent_when_given(server, api_token):
+    assert VariantGridAPI(server, api_token).headers == {"Authorization": f"Token {api_token}"}
+
+
+@responses.activate
+def test_vg3_has_no_symbolic_alts(api, capabilities_url):
+    """ VG3 reports its capabilities but not symbolic_alts """
+    responses.add(responses.GET, capabilities_url, status=200,
+                  json={"version": "3.x", "features": ["upload_status"], "upload_file_types": ["vcf"]})
+    assert not api.supports(ServerFeature.SYMBOLIC_ALTS)
+
+
 def test_constructing_client_makes_no_request(server, api_token):
     with responses.RequestsMock() as rsps:  # raises if any request is made
         VariantGridAPI(server, api_token)
@@ -143,6 +170,8 @@ def _gated_calls(vg_objects, vcf):
         "link_sequencing_sample_extractions": lambda api: api.link_sequencing_sample_extractions(
             vg_objects["sample_sheet_lookup"], {"fake_sample_1": "2600000001C"}),
         "upload_file_file_type": lambda api: api.upload_file(vcf, path=None, file_type=CVO),
+        "upload_file_required_features": lambda api: api.upload_file(
+            vcf, path=None, required_features=[ServerFeature.SYMBOLIC_ALTS]),
         "poll_upload_status": lambda api: api.poll_upload_status(uploaded_file_id=1),
         "wait_for_annotation": lambda api: api.wait_for_annotation(uploaded_file_id=1, sleep=lambda _: None),
         "download_annotated": lambda api: api.download_annotated(uploaded_file_id=1, dest_path=vcf + ".out"),
@@ -152,7 +181,7 @@ def _gated_calls(vg_objects, vcf):
 
 GATED = ["create_patient", "create_specimen", "create_extraction", "link_sequencing_sample_extraction",
          "link_sequencing_sample_extractions",
-         "upload_file_file_type",
+         "upload_file_file_type", "upload_file_required_features",
          "poll_upload_status", "wait_for_annotation", "download_annotated", "annotate_vcf"]
 
 
@@ -224,6 +253,31 @@ def test_upload_file_type_posts_when_accepted(skip_api, server, capabilities_url
     upload_call = responses.calls[-1]
     assert upload_call.request.url.startswith(upload_url)
     assert "file_type" not in upload_call.request.url  # a client-side gate only, not sent
+
+
+@responses.activate
+def test_upload_file_required_features_posts_when_supported(skip_api, server, capabilities_url, capabilities_json,
+                                                            vcf):
+    """ SACGF/variantgrid_api#38 - an SV VCF with symbolic alts goes only to a server with symbolic_alts """
+    responses.add(responses.GET, capabilities_url, json=capabilities_json, status=200)
+    upload_url = f"{server}/upload/api/v1/file_upload"
+    responses.add(responses.POST, upload_url, json={"uploaded_file_id": 1}, status=200)
+
+    assert skip_api.upload_file(vcf, path=None,
+                                required_features=[ServerFeature.SYMBOLIC_ALTS]) == {"uploaded_file_id": 1}
+    upload_call = responses.calls[-1]
+    assert upload_call.request.url == upload_url  # a client-side gate only, nothing sent
+
+
+@responses.activate
+def test_upload_file_required_features_checked_before_metadata(api, capabilities_url, vcf):
+    """ A missing required feature skips/raises on its own - the metadata check doesn't run first """
+    responses.add(responses.GET, capabilities_url, status=200,
+                  json={"version": "3.x", "features": ["upload_metadata"], "upload_file_types": ["vcf"]})
+    with pytest.raises(UnsupportedFeatureError, match="symbolic_alts"):
+        api.upload_file(vcf, path=None, metadata={"genome_build": "GRCh37"},
+                        required_features=[ServerFeature.SYMBOLIC_ALTS])
+    assert len(responses.calls) == 1
 
 
 @responses.activate
