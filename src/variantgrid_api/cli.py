@@ -198,7 +198,9 @@ def build_parser():
                    help="CSV download compression: zip (default, .csv.zip) or none (plain .csv - needs a server "
                         "with the annotated_download_compression feature)")
     p.add_argument("-o", "--dest", default=".",
-                   help="Destination directory or file for the download (default: current directory)")
+                   help="Destination directory or file for the download (default: current directory). "
+                        "A path ending in '/' is a directory, created if it doesn't exist, and the download "
+                        "keeps the server's filename")
     p.add_argument("--wait", action="store_true",
                    help="Poll until annotation finishes and download it, instead of returning immediately "
                         "(can take hours)")

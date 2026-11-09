@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import os
 import re
 import time
 import urllib
@@ -674,8 +675,9 @@ class VariantGridAPI:
 
             The endpoint returns 202 while the file is still being generated - this polls until it is ready (200),
             then streams the attachment to dest_path. If dest_path is None the server's attachment filename is used
-            in the current directory; if it is an existing directory the attachment filename is placed inside it;
-            otherwise it is treated as the full destination path. Returns the Path written.
+            in the current directory; if it is an existing directory, or a str ending in '/' (a directory, created
+            if it doesn't exist yet), the attachment filename is placed inside it; otherwise it is treated as the
+            full destination path. Returns the Path written.
 
             Raises TimeoutError if the file isn't ready within 'timeout' seconds. Needs server feature 'upload_status' """
         if not self._require(ServerFeature.UPLOAD_STATUS):
@@ -711,9 +713,20 @@ class VariantGridAPI:
         if dest_path is None:
             return Path(filename)
         dest = Path(dest_path)
+        if self._names_directory(dest_path):
+            # Path() drops the trailing slash, so check the string - 'results/' is a directory even if it's new
+            dest.mkdir(parents=True, exist_ok=True)
         if dest.is_dir():
             return dest / filename
         return dest
+
+    @staticmethod
+    def _names_directory(dest_path: Union[str, Path]) -> bool:
+        """ A str ending in a path separator names a directory (Path objects can't carry one) """
+        if not isinstance(dest_path, str):
+            return False
+        separators = (os.sep,) + ((os.altsep,) if os.altsep else ())
+        return dest_path.endswith(separators)
 
     @staticmethod
     def _safe_json(response):
