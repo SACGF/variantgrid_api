@@ -1,3 +1,0 @@
-### Changed
-
-- [`download_annotated()` / `annotate_vcf()` / `vg_api annotate_vcf -o`: a destination ending in `/` is a directory](https://github.com/SACGF/variantgrid_api/issues/35) - `dest_path="results/"` (a `str` ending in a path separator) is created if it doesn't exist yet (with any parents) and the download is written inside it under the server's attachment filename. Before, a directory that didn't exist yet was taken as the file name, so `-o results/` wrote a file called `results`. A path without a trailing slash works as before: an existing directory gets the attachment filename inside it, anything else is the file to write. The directory is only created once the download succeeds.
