@@ -1,0 +1,6 @@
+### Added
+
+- [Plain CSV annotated downloads](https://github.com/SACGF/variantgrid_api/issues/36) - `download_annotated()` and `annotate_vcf()` take `compression`: `"zip"` (default, `*.csv.zip` as before) or `"none"` for a plain `*.csv`. It's CSV only (the VCF is always gzipped), so `compression="none"` with `export_type="vcf"` is a `ValueError`. `"none"` is sent as `?compression=none`. The default sends no parameter, so the request is the same as before. The fallback filename (no `Content-Disposition`) is `download.csv` for a plain CSV. Needs a server at or after SACGF/variantgrid#2368.
+  - `ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION` (`"annotated_download_compression"`). Asking for `"none"` from a server without it applies `unsupported_feature_policy`: ERROR raises `UnsupportedFeatureError`, SKIP logs a warning and downloads the zip. `annotate_vcf()` checks this before uploading.
+  - `vg_api annotate_vcf --compression {zip,none}`. With `none`, the CLI checks the server before uploading and exits 1 if the server can't send a plain CSV, or if `--export-type` isn't `csv`.
+  - `MockVariantGridAPI.download_annotated()` / `annotate_vcf()` take `compression`, with the same validation and gating. They record it only when it isn't `"zip"`.
