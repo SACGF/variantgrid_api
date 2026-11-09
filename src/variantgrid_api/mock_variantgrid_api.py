@@ -238,7 +238,10 @@ class MockVariantGridAPI:
             "extraction": str(reference_json(extraction_reference)),
         } for sample_name, extraction_reference in extractions.items()])
 
-    def upload_file(self, filename, path=_UNSET, metadata=None, file_type=None):
+    def upload_file(self, filename, path=_UNSET, metadata=None, file_type=None, required_features=None):
+        for feature in required_features or ():
+            if not self._require(feature):
+                return None
         if metadata and not self.supports(ServerFeature.UPLOAD_METADATA):
             self._unsupported(f"upload metadata for '{filename}' (server doesn't support feature 'upload_metadata')")
             metadata = None
@@ -250,6 +253,8 @@ class MockVariantGridAPI:
         extra = {"metadata": metadata} if metadata is not None else {}
         if file_type is not None:
             extra["file_type"] = file_type
+        if required_features is not None:
+            extra["required_features"] = required_features
         self._record("upload_file", filename, path=path, **extra)
         return self._ret("upload_file", {"uploaded_file_id": 1, "sha256_hash": "deadbeef",
                                          "path": path, "status": "ok"})

@@ -163,6 +163,20 @@ def test_mock_plain_csv_on_older_server_follows_policy():
     assert "compression" not in kwargs  # fell back to zip
 
 
+def test_mock_upload_file_required_features(mock_api):
+    """ #38 - recorded only when given, and gated like the real client """
+    mock_api.upload_file("sv.vcf", path=None, required_features=[ServerFeature.SYMBOLIC_ALTS])
+    assert mock_api.get_calls("upload_file") == [
+        (("sv.vcf",), {"path": None, "required_features": [ServerFeature.SYMBOLIC_ALTS]})]
+
+    vg3 = ServerCapabilities(version="3.x", features=frozenset({ServerFeature.UPLOAD_STATUS}))
+    with pytest.raises(UnsupportedFeatureError):
+        MockVariantGridAPI(capabilities=vg3).upload_file("sv.vcf", required_features=[ServerFeature.SYMBOLIC_ALTS])
+    skip_api = MockVariantGridAPI(capabilities=vg3, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    assert skip_api.upload_file("sv.vcf", required_features=[ServerFeature.SYMBOLIC_ALTS]) is None
+    skip_api.assert_not_called("upload_file")
+
+
 def test_mock_annotate_vcf_records_and_returns(mock_api):
     result = mock_api.annotate_vcf("input.vcf", export_type="csv")
     mock_api.assert_called_once("annotate_vcf")

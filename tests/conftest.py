@@ -30,7 +30,7 @@ def capabilities_json():
         "git_hash": "2130cffe0",
         "features": ["patients", "link_extraction", "link_extractions_bulk", "upload_status",
                      "joint_called_vcf_cross_run", "upload_metadata", "cram_alignment_files", "alignment_files",
-                     "annotated_download_compression"],
+                     "annotated_download_compression", "symbolic_alts"],
         "upload_file_types": ["vcf", "gene_coverage", "dragen_tso500_all_fusions",
                               "dragen_tso500_combined_variant_output", "dragen_tso500_metrics_output",
                               "gene_level_cnv_vcf"],
