@@ -141,6 +141,28 @@ def test_mock_download_annotated_defaults_to_dest_path(mock_api):
     assert str(result) == "/tmp/out.vcf.gz"
 
 
+def test_mock_download_annotated_compression(mock_api):
+    """ #36 - compression is recorded only when not the default """
+    mock_api.download_annotated(uploaded_file_id=1, export_type="csv")
+    mock_api.download_annotated(uploaded_file_id=1, export_type="csv", compression="none")
+    (_, default_kwargs), (_, plain_kwargs) = mock_api.get_calls("download_annotated")
+    assert "compression" not in default_kwargs
+    assert plain_kwargs["compression"] == "none"
+    with pytest.raises(ValueError):
+        mock_api.download_annotated(uploaded_file_id=1, export_type="vcf", compression="none")
+
+
+def test_mock_plain_csv_on_older_server_follows_policy():
+    older = ServerCapabilities(version="4.0.0", features=frozenset({ServerFeature.UPLOAD_STATUS}))
+    with pytest.raises(UnsupportedFeatureError):
+        MockVariantGridAPI(capabilities=older).annotate_vcf("input.vcf", export_type="csv", compression="none")
+
+    mock_api = MockVariantGridAPI(capabilities=older, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    mock_api.annotate_vcf("input.vcf", export_type="csv", compression="none")
+    (_, kwargs), = mock_api.get_calls("annotate_vcf")
+    assert "compression" not in kwargs  # fell back to zip
+
+
 def test_mock_annotate_vcf_records_and_returns(mock_api):
     result = mock_api.annotate_vcf("input.vcf", export_type="csv")
     mock_api.assert_called_once("annotate_vcf")

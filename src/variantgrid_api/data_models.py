@@ -526,6 +526,8 @@ class ServerFeature(_ServerName):
     UPLOAD_METADATA = "upload_metadata"
     CRAM_ALIGNMENT_FILES = "cram_alignment_files"  # a 'bam_file' path ending .cram is stored as a CRAM
     ALIGNMENT_FILES = "alignment_files"  # SequencingFile and QC 'alignment_files' (SACGF/variantgrid#2105)
+    # Annotated CSV download takes ?compression=zip|none, default zip (SACGF/variantgrid#2368)
+    ANNOTATED_DOWNLOAD_COMPRESSION = "annotated_download_compression"
 
 
 class UploadFileType(_ServerName):

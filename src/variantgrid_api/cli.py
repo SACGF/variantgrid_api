@@ -15,6 +15,7 @@ import sys
 import requests
 
 from variantgrid_api.api_client import VariantGridAPI, AnnotationError, UnsupportedFeatureError
+from variantgrid_api.data_models import ServerFeature
 
 DEFAULT_SERVER = "https://variantgrid.com"
 
@@ -116,7 +117,8 @@ def _probe_status(api, logger, sha256, verbose=False):
 
 
 def _download(api, args, sha256):
-    path = api.download_annotated(sha256=sha256, export_type=args.export_type, dest_path=args.dest)
+    path = api.download_annotated(sha256=sha256, export_type=args.export_type, dest_path=args.dest,
+                                  compression=args.compression)
     print(f"Annotated {args.export_type} written to {path}")
     return EXIT_OK
 
@@ -125,8 +127,19 @@ def annotate_vcf_cmd(args):
     if not os.path.isfile(args.vcf):
         print(f"No such file: {args.vcf}", file=sys.stderr)
         return EXIT_ERROR
+    if args.compression != "zip" and args.export_type != "csv":
+        print(f"--compression {args.compression} applies only to --export-type csv (the VCF is always gzipped)",
+              file=sys.stderr)
+        return EXIT_ERROR
 
     api, logger = _build_api(args)
+    # Checked before uploading, so we don't upload a file we then can't download as asked. A server without
+    # upload_status at all is reported by the first status poll instead
+    if (args.compression != "zip" and api.supports(ServerFeature.UPLOAD_STATUS)
+            and not api.supports(ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION)):
+        print(f"This VariantGrid server (version '{api.capabilities.version}') can't send a plain CSV - "
+              f"leave out --compression {args.compression} to download the .csv.zip", file=sys.stderr)
+        return EXIT_ERROR
     name = os.path.basename(args.vcf)
     sha256 = _sha256(args.vcf)
 
@@ -181,6 +194,9 @@ def build_parser():
     p.add_argument("vcf", help="Path to the VCF (.vcf / .vcf.gz) to annotate")
     p.add_argument("--export-type", choices=("vcf", "csv"), default="vcf",
                    help="Download format (default: vcf)")
+    p.add_argument("--compression", choices=("zip", "none"), default="zip",
+                   help="CSV download compression: zip (default, .csv.zip) or none (plain .csv - needs a server "
+                        "with the annotated_download_compression feature)")
     p.add_argument("-o", "--dest", default=".",
                    help="Destination directory or file for the download (default: current directory)")
     p.add_argument("--wait", action="store_true",

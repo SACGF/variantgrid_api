@@ -278,21 +278,42 @@ class MockVariantGridAPI:
             "error": None,
         })
 
+    def _download_compression(self, export_type, compression):
+        """ Same validation and gating as VariantGridAPI._download_compression """
+        if export_type not in ("vcf", "csv"):
+            raise ValueError(f"export_type must be 'vcf' or 'csv', got {export_type!r}")
+        if compression not in ("zip", "none"):
+            raise ValueError(f"compression must be one of ('zip', 'none'), got {compression!r}")
+        if compression == "zip":
+            return compression
+        if export_type != "csv":
+            raise ValueError(f"compression={compression!r} applies only to export_type 'csv' - the VCF is always gzipped")
+        if not self.supports(ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION):
+            self._unsupported(f"plain CSV download (server doesn't support feature "
+                              f"'{ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION}') - downloading the zip")
+            return "zip"
+        return compression
+
     def download_annotated(self, uploaded_file_id=None, sha256=None, export_type="vcf",
-                           dest_path=None, timeout=3600, poll_interval=10, sleep=None):
+                           dest_path=None, timeout=3600, poll_interval=10, sleep=None, compression="zip"):
         if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
+        compression = self._download_compression(export_type, compression)
+        # compression only recorded when not the default, so existing assertions on the recorded kwargs still hold
+        extra = {"compression": compression} if compression != "zip" else {}
         self._record("download_annotated", uploaded_file_id, sha256, export_type=export_type,
-                     dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep)
+                     dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep, **extra)
         default = Path(dest_path) if dest_path is not None else Path(f"download.{export_type}")
         return self._ret("download_annotated", default)
 
     def annotate_vcf(self, filename, export_type="vcf", dest_path=None,
-                     timeout=3600, poll_interval=10, sleep=None):
+                     timeout=3600, poll_interval=10, sleep=None, compression="zip"):
         if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
+        compression = self._download_compression(export_type, compression)
+        extra = {"compression": compression} if compression != "zip" else {}
         self._record("annotate_vcf", filename, export_type=export_type, dest_path=dest_path,
-                     timeout=timeout, poll_interval=poll_interval, sleep=sleep)
+                     timeout=timeout, poll_interval=poll_interval, sleep=sleep, **extra)
         default = Path(dest_path) if dest_path is not None else Path(f"download.{export_type}")
         return self._ret("annotate_vcf", default)
 

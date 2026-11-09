@@ -630,21 +630,47 @@ class VariantGridAPI:
             sleep(poll_interval)
 
     @staticmethod
-    def _attachment_filename(response, export_type: str) -> str:
+    def _attachment_filename(response, export_type: str, compression: str = "zip") -> str:
         content_disposition = response.headers.get("Content-Disposition", "")
         if m := re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', content_disposition):
             return urllib.parse.unquote(m.group(1))
-        ext = ".vcf.gz" if export_type == "vcf" else ".csv.zip"
+        if export_type == "vcf":
+            ext = ".vcf.gz"
+        else:
+            ext = ".csv" if compression == "none" else ".csv.zip"
         return f"download{ext}"
+
+    DOWNLOAD_COMPRESSIONS = ("zip", "none")
+
+    def _download_compression(self, export_type: str, compression: str) -> str:
+        """ Validates compression and returns what to ask the server for. 'none' needs the server feature
+            'annotated_download_compression' - without it, SKIP falls back to 'zip' (with a warning) and ERROR raises """
+        if export_type not in ("vcf", "csv"):
+            raise ValueError(f"export_type must be 'vcf' or 'csv', got {export_type!r}")
+        if compression not in self.DOWNLOAD_COMPRESSIONS:
+            raise ValueError(f"compression must be one of {self.DOWNLOAD_COMPRESSIONS}, got {compression!r}")
+        if compression == "zip":
+            return compression
+        if export_type != "csv":
+            raise ValueError(f"compression={compression!r} applies only to export_type 'csv' - the VCF is always gzipped")
+        if not self.supports(ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION):
+            self._unsupported(f"plain CSV download (server doesn't support feature "
+                              f"'{ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION}') - downloading the zip")
+            return "zip"
+        return compression
 
     def download_annotated(self, uploaded_file_id: Optional[int] = None, sha256: Optional[str] = None,
                            export_type: str = "vcf", dest_path: Optional[Union[str, Path]] = None,
                            timeout: float = 3600, poll_interval: float = 10,
-                           sleep: Callable = time.sleep) -> Optional[Path]:
+                           sleep: Callable = time.sleep, compression: str = "zip") -> Optional[Path]:
         """ Download the cohort-level annotated export of an uploaded VCF, saving it to disk.
 
-            export_type is 'vcf' (gzipped *.vcf.gz) or 'csv' (zipped *.csv.zip). The export covers all samples
-            in the uploaded VCF (single-sample VCFs included).
+            export_type is 'vcf' (gzipped *.vcf.gz) or 'csv'. The export covers all samples in the uploaded VCF
+            (single-sample VCFs included).
+
+            compression (CSV only): 'zip' (default, *.csv.zip) or 'none' for a plain *.csv. 'none' needs the server
+            feature 'annotated_download_compression' (SACGF/variantgrid#2368) - without it, unsupported_feature_policy
+            SKIP downloads the zip (with a warning) and ERROR raises UnsupportedFeatureError. The VCF is always gzipped.
 
             The endpoint returns 202 while the file is still being generated - this polls until it is ready (200),
             then streams the attachment to dest_path. If dest_path is None the server's attachment filename is used
@@ -654,13 +680,14 @@ class VariantGridAPI:
             Raises TimeoutError if the file isn't ready within 'timeout' seconds. Needs server feature 'upload_status' """
         if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
-        if export_type not in ("vcf", "csv"):
-            raise ValueError(f"export_type must be 'vcf' or 'csv', got {export_type!r}")
+        compression = self._download_compression(export_type, compression)
         segment = self._upload_key_segment(uploaded_file_id, sha256)
         url = self._get_url(f"upload/api/v1/download/{segment}/{export_type}")
+        # Only sent for a plain CSV, so the default request is exactly what older clients sent
+        params = {"compression": compression} if compression != "zip" else None
         deadline = time.monotonic() + timeout
         while True:
-            response = requests.get(url, headers=self.headers, stream=True)
+            response = requests.get(url, params=params, headers=self.headers, stream=True)
             if response.status_code == 202:
                 if self.log_response:
                     self.logger.info("Download of '%s' still generating: %s", url, self._safe_json(response))
@@ -671,15 +698,16 @@ class VariantGridAPI:
             if not response.ok:
                 # Raises with logging (JSON 'error' message from the server)
                 self._handle_json_response(response, f"download {export_type} for {segment}")
-            dest = self._resolve_download_dest(dest_path, response, export_type)
+            dest = self._resolve_download_dest(dest_path, response, export_type, compression)
             with open(dest, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
             return dest
 
-    def _resolve_download_dest(self, dest_path: Optional[Union[str, Path]], response, export_type: str) -> Path:
-        filename = self._attachment_filename(response, export_type)
+    def _resolve_download_dest(self, dest_path: Optional[Union[str, Path]], response, export_type: str,
+                               compression: str = "zip") -> Path:
+        filename = self._attachment_filename(response, export_type, compression)
         if dest_path is None:
             return Path(filename)
         dest = Path(dest_path)
@@ -695,20 +723,24 @@ class VariantGridAPI:
             return None
 
     def annotate_vcf(self, filename: str, export_type: str = "vcf", dest_path: Optional[Union[str, Path]] = None,
-                     timeout: float = 3600, poll_interval: float = 10, sleep: Callable = time.sleep) -> Optional[Path]:
+                     timeout: float = 3600, poll_interval: float = 10, sleep: Callable = time.sleep,
+                     compression: str = "zip") -> Optional[Path]:
         """ Convenience one-liner: upload a VCF, wait for annotation to finish, download the annotated export.
 
             Chains upload_file -> wait_for_annotation -> download_annotated and returns the Path written.
-            Needs server feature 'upload_status' - checked before uploading """
+            Needs server feature 'upload_status', and for compression='none' 'annotated_download_compression'
+            (see download_annotated) - both checked before uploading """
         if not self._require(ServerFeature.UPLOAD_STATUS):
             return None
+        compression = self._download_compression(export_type, compression)
         # path is SeqAuto-only and makes ad-hoc uploads fail the import - omit it for the annotate flow
         upload = self.upload_file(filename, path=None)
         uploaded_file_id = upload["uploaded_file_id"]
         self.wait_for_annotation(uploaded_file_id=uploaded_file_id,
                                  timeout=timeout, poll_interval=poll_interval, sleep=sleep)
         return self.download_annotated(uploaded_file_id=uploaded_file_id, export_type=export_type,
-                                       dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep)
+                                       dest_path=dest_path, timeout=timeout, poll_interval=poll_interval, sleep=sleep,
+                                       compression=compression)
 
 
 
