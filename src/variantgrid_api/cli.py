@@ -20,6 +20,10 @@ from variantgrid_api.data_models import ServerFeature
 
 DEFAULT_SERVER = "https://variantgrid.com"
 
+# Where a user gets their own token (SACGF/variantgrid_api#48)
+TOKEN_HELP = ("To get an API token, log in to VariantGrid, click your username (top right), then in the "
+              "'API Tokens' section click 'Manage tokens for scripts and API clients'.")
+
 EXIT_OK = 0        # annotated file downloaded
 EXIT_ERROR = 1     # bad input / auth / server or annotation error
 EXIT_PENDING = 3   # uploaded just now, or still annotating - come back later
@@ -50,11 +54,15 @@ def _enable_verbose_logging():
     vg_api_logger.addHandler(handler)
 
 
+def _server(args):
+    return args.server or os.environ.get("VARIANTGRID_API_SERVER") or DEFAULT_SERVER
+
+
 def _build_api(args):
+    server = _server(args)
     token = args.token or os.environ.get("VARIANTGRID_API_TOKEN")
     if not token:
-        raise SystemExit("No API token - pass --token or set VARIANTGRID_API_TOKEN")
-    server = args.server or os.environ.get("VARIANTGRID_API_SERVER") or DEFAULT_SERVER
+        raise SystemExit(f"No API token - pass --token or set VARIANTGRID_API_TOKEN. {_token_help(server)}")
     # Own logger so we can silence the expected 404 when a file hasn't been uploaded yet.
     logger = logging.getLogger("vg_api.cli")
     verbose = args.verbose
@@ -63,6 +71,10 @@ def _build_api(args):
     api = VariantGridAPI(server=server, api_token=token, logger=logger,
                          log_request=verbose, log_response=verbose)
     return api, logger
+
+
+def _token_help(server):
+    return TOKEN_HELP.replace("log in to VariantGrid", f"log in to VariantGrid ({server})")
 
 
 def _log_status(args, logger, status):
@@ -93,6 +105,12 @@ def _pending_reason(status):
     if status.get("downloads_available") is False:
         parts.append("downloads not available")
     return ", ".join(parts)
+
+
+def _is_auth_error(exc):
+    """ 401/403 - a missing, mistyped, expired or revoked token """
+    resp = getattr(exc, "response", None)
+    return resp is not None and resp.status_code in (401, 403)
 
 
 def _is_not_found(exc):
@@ -188,7 +206,7 @@ def build_parser():
     common.add_argument("--server",
                         help="VariantGrid server URL - https:// if no scheme is given (default: $VARIANTGRID_API_SERVER or "
                              f"{DEFAULT_SERVER})")
-    common.add_argument("--token", help="API token (default: $VARIANTGRID_API_TOKEN)")
+    common.add_argument("--token", help=f"API token (default: $VARIANTGRID_API_TOKEN). {TOKEN_HELP}")
     common.add_argument("-v", "--verbose", action="store_true",
                         help="Log requests, responses and the full upload status to stderr")
 
@@ -235,6 +253,9 @@ def main(argv=None):
         return EXIT_ERROR
     except requests.HTTPError as e:
         print(f"HTTP error: {e}", file=sys.stderr)
+        if _is_auth_error(e):
+            print(f"Check your API token (--token or VARIANTGRID_API_TOKEN). {_token_help(_server(args))}",
+                  file=sys.stderr)
         return EXIT_ERROR
     except UnsupportedFeatureError as e:
         print(f"This VariantGrid server can't annotate uploaded VCFs via the API: {e}", file=sys.stderr)
