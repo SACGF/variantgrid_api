@@ -249,3 +249,15 @@ def test_not_verbose_logs_nothing(vcf, capsys):
 
     assert rc == cli.EXIT_PENDING
     assert capsys.readouterr().err == ""
+
+
+@responses.activate
+def test_server_without_scheme(vcf):
+    """--server test.variantgrid.com (no https://) works (SACGF/variantgrid_api#44)"""
+    _add_capabilities()
+    responses.add(responses.GET, STATUS_RE, json={"detail": "not found"}, status=404)
+    responses.add(responses.POST, UPLOAD_URL, json={"uploaded_file_id": 42}, status=200)
+
+    argv = ["annotate_vcf", vcf, "--server", SERVER.removeprefix("https://"), "--token", "T"]
+    assert cli.main(argv) == cli.EXIT_PENDING
+    assert responses.calls[0].request.url == CAPABILITIES_URL

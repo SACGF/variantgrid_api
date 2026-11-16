@@ -63,7 +63,7 @@ class VariantGridAPI:
                  log_request=False, log_response=False,
                  unsupported_feature_policy=UnsupportedFeaturePolicy.ERROR
     ):
-        self.server = server
+        self.server = self._normalise_server(server)
         # api_token=None sends no Authorization header - enough for the public capabilities endpoint
         # (SACGF/variantgrid#2732); everything else needs a token
         self.headers = {"Authorization": f"Token {api_token}"} if api_token is not None else {}
@@ -75,6 +75,16 @@ class VariantGridAPI:
         self.log_response = log_response
         self.unsupported_feature_policy = unsupported_feature_policy
         self._capabilities: Optional[ServerCapabilities] = None
+
+    @staticmethod
+    def _normalise_server(server):
+        """ A server without a scheme ('test.variantgrid.com', 'localhost:8000') is https. A trailing slash is added
+            so urljoin keeps a sub-path ('https://example.org/vg') - SACGF/variantgrid_api#44 """
+        if "://" not in server:
+            server = f"https://{server}"
+        if not server.endswith("/"):
+            server += "/"
+        return server
 
     def _get_url(self, url):
         return urllib.parse.urljoin(self.server, url)

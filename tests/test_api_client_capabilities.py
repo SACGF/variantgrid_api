@@ -289,3 +289,19 @@ def test_upload_file_type_skipped_when_server_has_endpoint_but_not_type(skip_api
 
     assert skip_api.upload_file(vcf, path=None, file_type=CVO) is None
     assert len(responses.calls) == 1
+
+
+@pytest.mark.parametrize("server, expected_url", [
+    ("https://example.org", "https://example.org/api/v1/capabilities"),
+    ("https://example.org/", "https://example.org/api/v1/capabilities"),
+    ("example.org", "https://example.org/api/v1/capabilities"),
+    ("localhost:8000", "https://localhost:8000/api/v1/capabilities"),
+    ("http://localhost:8000", "http://localhost:8000/api/v1/capabilities"),
+    ("https://example.org/vg", "https://example.org/vg/api/v1/capabilities"),
+])
+@responses.activate
+def test_server_url_normalised(server, expected_url, capabilities_json):
+    """No scheme means https, and a sub-path is kept (SACGF/variantgrid_api#44)"""
+    responses.add(responses.GET, expected_url, json=capabilities_json, status=200)
+    VariantGridAPI(server, "TKN").capabilities
+    assert responses.calls[-1].request.url == expected_url
