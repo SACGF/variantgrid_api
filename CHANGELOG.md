@@ -1,3 +1,16 @@
+## [1.12.0] - 2026-11-16
+
+### Added
+
+- [`vg_api --version`](https://github.com/SACGF/variantgrid_api/issues/45) prints the installed `variantgrid_api` client version, eg `vg_api 1.12.0`. It is also listed in `vg_api --help`.
+
+### Changed
+
+- [`download_annotated()` / `annotate_vcf()` with `compression="none"` under `UnsupportedFeaturePolicy.ERROR`](https://github.com/SACGF/variantgrid_api/issues/43): the `UnsupportedFeatureError` message no longer ends with "- downloading the zip", because nothing is downloaded. The SKIP warning still says it. `MockVariantGridAPI` matches.
+- [`download_annotated(dest_path=Path(...))`](https://github.com/SACGF/variantgrid_api/issues/43) logs a warning when the `Path` doesn't exist and has no suffix (eg `Path("out/new_dir/")`, which `Path` stores as `out/new_dir`). It is still written as a file, as before. To download into a new directory, pass a str ending in `/`.
+- [`VariantGridAPI(server, ...)` normalises `server`](https://github.com/SACGF/variantgrid_api/issues/44). A server without a scheme (eg `vg_api annotate_vcf --server test.variantgrid.com`, or the same in `VARIANTGRID_API_SERVER`) now defaults to `https://`. Before, it failed with `requests.exceptions.MissingSchema: Invalid URL 'api/v1/capabilities'`. A trailing slash is also added, so a server under a sub-path (`https://example.org/vg`) keeps it instead of `urljoin` dropping it. `VariantGridAPI.server` holds the normalised URL. No server change needed.
+- [How to get an API token](https://github.com/SACGF/variantgrid_api/issues/48): VariantGrid users can now create their own token (click your username, then under "API Tokens", "Manage tokens for scripts and API clients"). The README has a new "API token" section, and `vg_api` says how to get a token in `--token`'s help, when no token is given, and when the server rejects one (HTTP 401/403).
+
 ## [1.11.0] - 2026-11-09
 
 ### Added
