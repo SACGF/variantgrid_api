@@ -186,7 +186,7 @@ def _client_version():
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--server",
-                        help="VariantGrid server URL (default: $VARIANTGRID_API_SERVER or "
+                        help="VariantGrid server URL - https:// if no scheme is given (default: $VARIANTGRID_API_SERVER or "
                              f"{DEFAULT_SERVER})")
     common.add_argument("--token", help="API token (default: $VARIANTGRID_API_TOKEN)")
     common.add_argument("-v", "--verbose", action="store_true",
