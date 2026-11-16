@@ -154,8 +154,9 @@ def test_mock_download_annotated_compression(mock_api):
 
 def test_mock_plain_csv_on_older_server_follows_policy():
     older = ServerCapabilities(version="4.0.0", features=frozenset({ServerFeature.UPLOAD_STATUS}))
-    with pytest.raises(UnsupportedFeatureError):
+    with pytest.raises(UnsupportedFeatureError) as exc_info:
         MockVariantGridAPI(capabilities=older).annotate_vcf("input.vcf", export_type="csv", compression="none")
+    assert "downloading the zip" not in str(exc_info.value)  # ERROR downloads nothing (#43)
 
     mock_api = MockVariantGridAPI(capabilities=older, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
     mock_api.annotate_vcf("input.vcf", export_type="csv", compression="none")

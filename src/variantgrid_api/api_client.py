@@ -665,8 +665,12 @@ class VariantGridAPI:
         if export_type != "csv":
             raise ValueError(f"compression={compression!r} applies only to export_type 'csv' - the VCF is always gzipped")
         if not self.supports(ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION):
-            self._unsupported(f"plain CSV download (server doesn't support feature "
-                              f"'{ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION}') - downloading the zip")
+            message = (f"plain CSV download (server doesn't support feature "
+                       f"'{ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION}')")
+            # Only SKIP falls back to the zip - ERROR raises and downloads nothing (SACGF/variantgrid_api#43)
+            if self.unsupported_feature_policy == UnsupportedFeaturePolicy.SKIP:
+                message += " - downloading the zip"
+            self._unsupported(message)
             return "zip"
         return compression
 
@@ -687,7 +691,8 @@ class VariantGridAPI:
             then streams the attachment to dest_path. If dest_path is None the server's attachment filename is used
             in the current directory; if it is an existing directory, or a str ending in '/' (a directory, created
             if it doesn't exist yet), the attachment filename is placed inside it; otherwise it is treated as the
-            full destination path. Returns the Path written.
+            full destination path. A Path can't end in '/', so a Path with no suffix that doesn't exist is written as
+            a file, with a warning - pass a str ending in '/' for a new directory. Returns the Path written.
 
             Raises TimeoutError if the file isn't ready within 'timeout' seconds. Needs server feature 'upload_status' """
         if not self._require(ServerFeature.UPLOAD_STATUS):
@@ -728,6 +733,10 @@ class VariantGridAPI:
             dest.mkdir(parents=True, exist_ok=True)
         if dest.is_dir():
             return dest / filename
+        if not isinstance(dest_path, str) and not dest.exists() and not dest.suffix:
+            # Path("new_dir/") is Path("new_dir") - likely meant as a directory (SACGF/variantgrid_api#43)
+            self.logger.warning("Writing download to file '%s' - to download into a new directory, pass a str "
+                                "ending in '/' (Path drops the trailing slash) or create the directory first", dest)
         return dest
 
     @staticmethod

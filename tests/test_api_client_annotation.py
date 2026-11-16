@@ -354,3 +354,50 @@ def test_annotate_vcf_chains_upload_wait_download(api, server, tmp_path):
     out = api.annotate_vcf(str(src), dest_path=tmp_path, poll_interval=0, sleep=_no_sleep)
     assert out == tmp_path / "final.vcf.gz"
     assert out.read_bytes() == b"vcfdata"
+
+
+def test_download_annotated_plain_csv_old_server_error_message(server, api_token, capabilities_json):
+    """ ERROR raises and downloads nothing, so the message mustn't say it's downloading the zip (#43) """
+    capabilities_json["features"].remove("annotated_download_compression")
+    api = VariantGridAPI(server, api_token)
+    api._capabilities = ServerCapabilities.from_json(capabilities_json)
+    with pytest.raises(UnsupportedFeatureError) as exc_info:
+        api.download_annotated(uploaded_file_id=123, export_type="csv", compression="none")
+    assert "annotated_download_compression" in str(exc_info.value)
+    assert "downloading the zip" not in str(exc_info.value)
+
+
+@responses.activate
+def test_download_annotated_plain_csv_old_server_skip_warns_zip(server, api_token, capabilities_json, tmp_path,
+                                                                 caplog):
+    capabilities_json["features"].remove("annotated_download_compression")
+    api = VariantGridAPI(server, api_token, unsupported_feature_policy=UnsupportedFeaturePolicy.SKIP)
+    api._capabilities = ServerCapabilities.from_json(capabilities_json)
+    responses.add(responses.GET, f"{server}/upload/api/v1/download/123/csv", body=b"zipbytes", status=200)
+    api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=tmp_path, compression="none",
+                           sleep=_no_sleep)
+    assert "downloading the zip" in caplog.text
+
+
+@responses.activate
+def test_download_annotated_new_path_without_suffix_warns(api, server, tmp_path, caplog):
+    """ Path("new_dir/") drops the slash, so it's written as a file - with a warning (#43) """
+    responses.add(responses.GET, f"{server}/upload/api/v1/download/123/csv", body=b"zipbytes", status=200,
+                  headers={"Content-Disposition": 'attachment; filename="cohort.csv.zip"'})
+    dest = tmp_path / "new_dir"
+    out = api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=dest, sleep=_no_sleep)
+    assert out == dest
+    assert dest.is_file()
+    assert "Path drops the trailing slash" in caplog.text
+
+
+@responses.activate
+@pytest.mark.parametrize("dest_name, as_str", [("out.csv.zip", False), ("results", True)])
+def test_download_annotated_file_dest_no_warning(api, server, tmp_path, caplog, dest_name, as_str):
+    """ A Path with a suffix, or a str, is clearly a file - no warning """
+    responses.add(responses.GET, f"{server}/upload/api/v1/download/123/csv", body=b"zipbytes", status=200)
+    dest = tmp_path / dest_name
+    api.download_annotated(uploaded_file_id=123, export_type="csv", dest_path=str(dest) if as_str else dest,
+                           sleep=_no_sleep)
+    assert dest.is_file()
+    assert "Path drops the trailing slash" not in caplog.text
