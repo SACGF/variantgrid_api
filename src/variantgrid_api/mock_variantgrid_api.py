@@ -294,8 +294,12 @@ class MockVariantGridAPI:
         if export_type != "csv":
             raise ValueError(f"compression={compression!r} applies only to export_type 'csv' - the VCF is always gzipped")
         if not self.supports(ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION):
-            self._unsupported(f"plain CSV download (server doesn't support feature "
-                              f"'{ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION}') - downloading the zip")
+            message = (f"plain CSV download (server doesn't support feature "
+                       f"'{ServerFeature.ANNOTATED_DOWNLOAD_COMPRESSION}')")
+            # Only SKIP falls back to the zip - ERROR raises and downloads nothing (SACGF/variantgrid_api#43)
+            if self.unsupported_feature_policy == UnsupportedFeaturePolicy.SKIP:
+                message += " - downloading the zip"
+            self._unsupported(message)
             return "zip"
         return compression
 
