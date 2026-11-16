@@ -182,8 +182,30 @@ def test_missing_file_is_error(tmp_path):
 
 def test_missing_token_raises(vcf, monkeypatch):
     monkeypatch.delenv("VARIANTGRID_API_TOKEN", raising=False)
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as exc_info:
         cli.main(["annotate_vcf", vcf, "--server", SERVER])
+    # Says how to get a token, on the server being used (#48)
+    assert "Manage tokens for scripts and API clients" in str(exc_info.value.code)
+    assert SERVER in str(exc_info.value.code)
+
+
+@responses.activate
+@pytest.mark.parametrize("status", [401, 403])
+def test_rejected_token_says_how_to_get_one(vcf, capsys, status):
+    """ A bad token is an error that says how to get one (#48) """
+    _add_capabilities()
+    responses.add(responses.GET, STATUS_RE, json={"detail": "Invalid token."}, status=status)
+
+    assert cli.main(_argv(vcf)) == cli.EXIT_ERROR
+    err = capsys.readouterr().err
+    assert "Check your API token" in err
+    assert "Manage tokens for scripts and API clients" in err
+
+
+def test_token_help_says_how_to_get_one(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["annotate_vcf", "--help"])
+    assert "Manage tokens for scripts and API" in " ".join(capsys.readouterr().out.split())
 
 
 @responses.activate

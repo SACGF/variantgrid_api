@@ -12,6 +12,13 @@ See [changelog](https://github.com/SACGF/variantgrid_api/blob/main/CHANGELOG.md)
 python3 -m pip install variantgrid_api
 ```
 
+## API token
+
+Every call except `capabilities` needs an API token. VariantGrid users can create their own: log in, click your
+username (top right), then in the **API Tokens** section click **Manage tokens for scripts and API clients**.
+Copy the token and pass it as `api_token`, or to the `vg_api` command line tool with `--token` or the
+`VARIANTGRID_API_TOKEN` environment variable. Keep it secret, like a password.
+
 ## Example
 
 ```
