@@ -249,3 +249,12 @@ def test_not_verbose_logs_nothing(vcf, capsys):
 
     assert rc == cli.EXIT_PENDING
     assert capsys.readouterr().err == ""
+
+
+def test_version(capsys):
+    """vg_api --version prints the installed client version (SACGF/variantgrid_api#45)"""
+    import importlib.metadata
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--version"])
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"vg_api {importlib.metadata.version('variantgrid_api')}"
