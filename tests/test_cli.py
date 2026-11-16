@@ -261,3 +261,12 @@ def test_server_without_scheme(vcf):
     argv = ["annotate_vcf", vcf, "--server", SERVER.removeprefix("https://"), "--token", "T"]
     assert cli.main(argv) == cli.EXIT_PENDING
     assert responses.calls[0].request.url == CAPABILITIES_URL
+
+
+def test_version(capsys):
+    """vg_api --version prints the installed client version (SACGF/variantgrid_api#45)"""
+    import importlib.metadata
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--version"])
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"vg_api {importlib.metadata.version('variantgrid_api')}"

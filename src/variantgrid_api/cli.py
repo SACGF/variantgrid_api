@@ -7,6 +7,7 @@ state (upload ids, pending.json, ...) is kept, so you can poll from any machine 
 """
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import logging
 import os
@@ -174,6 +175,14 @@ def annotate_vcf_cmd(args):
     return EXIT_PENDING
 
 
+def _client_version():
+    """ Installed variantgrid_api package version (SACGF/variantgrid_api#45) """
+    try:
+        return importlib.metadata.version("variantgrid_api")
+    except importlib.metadata.PackageNotFoundError:  # running from a source tree that isn't installed
+        return "unknown"
+
+
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--server",
@@ -184,6 +193,8 @@ def build_parser():
                         help="Log requests, responses and the full upload status to stderr")
 
     parser = argparse.ArgumentParser(prog="vg_api", description="VariantGrid API command line tool")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_client_version()}",
+                        help="Show the variantgrid_api client version and exit")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("annotate_vcf", parents=[common],

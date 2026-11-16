@@ -46,7 +46,7 @@ Annotated vcf written to results/input.vcf_annotated_v254_GRCh38.vcf.gz
 `-o` takes a file or a directory. A path ending in `/` is a directory, created if it doesn't exist yet, and the
 download keeps the server's filename. `--export-type csv` downloads a `.csv.zip`. Add `--compression none` for a
 plain `.csv` (needs a server at or after SACGF/variantgrid#2368). Add `--verbose` to log each request, response
-and the full upload status to stderr.
+and the full upload status to stderr. `vg_api --version` shows the installed client version.
 
 From Python it's `upload_file()` / `poll_upload_status()` / `download_annotated()`, or the blocking
 `annotate_vcf()` one-liner. See
