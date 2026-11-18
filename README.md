@@ -50,6 +50,20 @@ $ vg_api annotate_vcf input.vcf.gz -o results/        # once it's done
 Annotated vcf written to results/input.vcf_annotated_v254_GRCh38.vcf.gz
 ```
 
+To wait until it's done instead, add `--wait`. It uploads (if needed), polls the server until annotation finishes,
+then downloads, all in one command:
+
+```console
+$ vg_api annotate_vcf input.vcf.gz -o results/ --wait
+Uploaded input.vcf.gz (id=13256).
+Waiting for annotation to finish - this can take a while...
+Annotated vcf written to results/input.vcf_annotated_v254_GRCh38.vcf.gz
+```
+
+Annotation can take hours. `--poll-interval` sets the seconds between status checks (default 10) and `--timeout`
+how long to wait before giving up (default 86400, ie 24 hours). Running `--wait` again on a file that's already
+uploaded skips the upload and carries on waiting.
+
 `-o` takes a file or a directory. A path ending in `/` is a directory, created if it doesn't exist yet, and the
 download keeps the server's filename. `--export-type csv` downloads a `.csv.zip`. Add `--compression none` for a
 plain `.csv` (needs a server at or after SACGF/variantgrid#2368). Add `--verbose` to log each request, response
