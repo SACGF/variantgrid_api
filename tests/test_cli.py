@@ -292,3 +292,18 @@ def test_version(capsys):
         cli.main(["--version"])
     assert exc_info.value.code == 0
     assert capsys.readouterr().out.strip() == f"vg_api {importlib.metadata.version('variantgrid_api')}"
+
+
+@responses.activate
+def test_wait_timeout_is_pending(vcf, capsys):
+    """--wait that runs out of --timeout: still annotating, so pending (exit 3) with a message, no traceback (#52)."""
+    _add_capabilities()
+    responses.add(responses.GET, STATUS_RE, json={"annotation_complete": False, "error": None}, status=200)
+
+    rc = cli.main(_argv(vcf, "--wait", "--timeout", "0", "--poll-interval", "0"))
+
+    assert rc == cli.EXIT_PENDING
+    out = capsys.readouterr().out
+    assert "still annotating after --timeout 0s" in out
+    assert "Run the same command again later" in out
+    assert not any(re.match(DOWNLOAD_RE, c.request.url) for c in responses.calls)

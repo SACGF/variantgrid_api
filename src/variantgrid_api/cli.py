@@ -172,7 +172,15 @@ def annotate_vcf_cmd(args):
         # Poll the server ourselves until annotation finishes (can take hours), then download.
         if status is None or not status.get("annotation_complete"):
             print("Waiting for annotation to finish - this can take a while...")
-            api.wait_for_annotation(sha256=sha256, timeout=args.timeout, poll_interval=args.poll_interval)
+            try:
+                api.wait_for_annotation(sha256=sha256, timeout=args.timeout, poll_interval=args.poll_interval)
+            except TimeoutError as e:
+                # The upload is fine and still annotating on the server, so this is pending, not an error (#52)
+                if args.verbose:
+                    logger.debug("%s", e)
+                print(f"{name}: still annotating after --timeout {args.timeout:g}s. "
+                      f"Run the same command again later to download.")
+                return EXIT_PENDING
         return _download(api, args, sha256)
 
     # Single-shot: report where it's at, download only if it's ready.

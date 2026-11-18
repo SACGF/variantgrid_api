@@ -61,8 +61,8 @@ Annotated vcf written to results/input.vcf_annotated_v254_GRCh38.vcf.gz
 ```
 
 Annotation can take hours. `--poll-interval` sets the seconds between status checks (default 10) and `--timeout`
-how long to wait before giving up (default 86400, ie 24 hours). Running `--wait` again on a file that's already
-uploaded skips the upload and carries on waiting.
+how long to wait before giving up (default 86400, ie 24 hours), which exits with 3 like a file that isn't ready
+yet. Running `--wait` again on a file that's already uploaded skips the upload and carries on waiting.
 
 `-o` takes a file or a directory. A path ending in `/` is a directory, created if it doesn't exist yet, and the
 download keeps the server's filename. `--export-type csv` downloads a `.csv.zip`. Add `--compression none` for a
